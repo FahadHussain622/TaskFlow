@@ -18,7 +18,7 @@ export default function BoardDashboard({ user, boards, setBoards, onLogout, onSe
       <div className="max-w-6xl mx-auto z-10 relative">
         <header className="flex justify-between items-center mb-12 bg-white/80 backdrop-blur-xl p-6 rounded-3xl border border-white shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-200">
+            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg">
               <LayoutDashboard size={22} />
             </div>
             <div>

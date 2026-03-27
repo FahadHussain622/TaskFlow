@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { ArrowLeft, Plus, MessageSquare, Calendar, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, Plus, MessageSquare, Paperclip, Calendar, MoreHorizontal } from 'lucide-react';
 
 export default function BoardWorkspace({ board, goBack, lists, setLists }) {
   const [selectedCard, setSelectedCard] = useState(null);
@@ -24,7 +24,7 @@ export default function BoardWorkspace({ board, goBack, lists, setLists }) {
     const content = window.prompt("Task Title:");
     if (!content) return;
     setLists(lists.map(list => 
-      list.id === listId ? { ...list, cards: [...list.cards, { id: `c-${Date.now()}`, content, label: '', dueDate: '', comments: 0 }] } : list
+      list.id === listId ? { ...list, cards: [...list.cards, { id: `c-${Date.now()}`, content, label: '', dueDate: '', comments: 0, attachments: 0, description: '' }] } : list
     ));
   };
 
@@ -32,6 +32,15 @@ export default function BoardWorkspace({ board, goBack, lists, setLists }) {
     const title = window.prompt("List Title:");
     if (!title) return;
     setLists([...lists, { id: `list-${Date.now()}`, title, cards: [] }]);
+  };
+
+  const getLabelColor = (label) => {
+    switch(label) {
+      case 'High Priority': return 'bg-rose-100 text-rose-700 ring-rose-200';
+      case 'Feature': return 'bg-indigo-100 text-indigo-700 ring-indigo-200';
+      case 'Design': return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+      default: return 'bg-slate-100 text-slate-700 ring-slate-200';
+    }
   };
 
   return (
@@ -48,7 +57,7 @@ export default function BoardWorkspace({ board, goBack, lists, setLists }) {
             <p className="text-[10px] font-black text-black uppercase tracking-widest">Active Workspace</p>
           </div>
         </div>
-        <div className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white flex items-center justify-center text-xs font-black text-white shadow-xl">F</div>
+        <div className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white flex items-center justify-center text-xs font-black text-white">F</div>
       </header>
 
       <div className="flex-1 overflow-x-auto p-8 scrollbar-hide">
@@ -74,9 +83,19 @@ export default function BoardWorkspace({ board, goBack, lists, setLists }) {
                               onClick={() => setSelectedCard(card)}
                               className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-400 hover:shadow-xl transition-all cursor-pointer group ${snapshot.isDragging ? 'rotate-2 scale-105 shadow-2xl ring-2 ring-indigo-500' : ''}`}
                             >
-                              <p className="text-sm font-bold text-slate-700 leading-relaxed mb-3">{card.content}</p>
-                              <div className="flex items-center gap-3 text-slate-300">
-                                <Calendar size={12} /> <span className="text-[10px] font-bold uppercase tracking-tighter">Apr 2026</span>
+                              {card.label && (
+                                <span className={`text-[9px] px-2 py-1 rounded-md font-black tracking-widest uppercase ring-1 mb-3 inline-block ${getLabelColor(card.label)}`}>
+                                  {card.label}
+                                </span>
+                              )}
+                              <p className="text-sm font-bold text-slate-700 leading-relaxed mb-4">{card.content}</p>
+                              
+                              <div className="flex items-center justify-between text-slate-400">
+                                <div className="flex items-center gap-3">
+                                  {card.dueDate && <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg"><Calendar size={12} /> {card.dueDate}</div>}
+                                  {card.comments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><MessageSquare size={12} /> {card.comments}</div>}
+                                  {card.attachments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><Paperclip size={12} /> {card.attachments}</div>}
+                                </div>
                               </div>
                             </div>
                           )}
@@ -102,11 +121,43 @@ export default function BoardWorkspace({ board, goBack, lists, setLists }) {
 
       {selectedCard && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white w-full max-xl rounded-[40px] shadow-[0_40px_100px_rgba(0,0,0,0.3)] p-10 relative">
-             <button onClick={() => setSelectedCard(null)} className="absolute top-8 right-8 text-slate-300 hover:text-rose-500 transition-colors">✕</button>
-             <h2 className="text-3xl font-black text-slate-800 mb-4">{selectedCard.content}</h2>
-             <div className="h-2 w-20 bg-indigo-600 rounded-full mb-8"></div>
-             <p className="text-slate-400 font-medium leading-relaxed">Task details and activity logs will be connected in the next phase.</p>
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden relative">
+            <div className="p-10 border-b border-slate-100">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-3xl font-black text-slate-800 tracking-tight">{selectedCard.content}</h2>
+                <button onClick={() => setSelectedCard(null)} className="text-slate-300 hover:text-rose-500 transition-colors text-2xl">✕</button>
+              </div>
+              {selectedCard.label && <span className={`text-[10px] px-3 py-1.5 rounded-full font-black uppercase tracking-widest ${getLabelColor(selectedCard.label)}`}>{selectedCard.label}</span>}
+            </div>
+            
+            <div className="p-10 grid grid-cols-3 gap-10">
+              <div className="col-span-2 space-y-8">
+                <div>
+                  <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Description</h3>
+                  <textarea defaultValue={selectedCard.description} className="w-full border border-slate-100 rounded-2xl p-6 text-sm text-slate-600 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all resize-none" rows="4" placeholder="Add a detailed description..."></textarea>
+                </div>
+                <div>
+                  <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Attachments</h3>
+                  <div className="border-2 border-dashed border-slate-100 rounded-3xl p-10 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 cursor-pointer transition-all">
+                    <Plus size={24} className="mx-auto mb-2 opacity-30" />
+                    Upload Files
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                <div>
+                  <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Actions</h3>
+                  <div className="space-y-3">
+                    <button className="w-full bg-slate-50 text-black text-[10px] font-black py-3 px-4 rounded-xl hover:bg-slate-100 transition-all text-left uppercase tracking-widest">🏷️ Labels</button>
+                    <button className="w-full bg-slate-50 text-black text-[10px] font-black py-3 px-4 rounded-xl hover:bg-slate-100 transition-all text-left uppercase tracking-widest">📅 Due Date</button>
+                  </div>
+                </div>
+                <div className="pt-8 border-t border-slate-100">
+                  <button className="w-full bg-rose-50 text-rose-600 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-rose-100 transition-all text-left uppercase tracking-widest">🗑️ Delete Card</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

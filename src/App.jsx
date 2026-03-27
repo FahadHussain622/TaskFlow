@@ -13,7 +13,14 @@ export default function App() {
 
   const [boardData, setBoardData] = useState({
     'b1': [
-      { id: 'list-1', title: 'To Do', cards: [{ id: 'c-1', content: 'Design MongoDB Schema', label: 'High Priority', dueDate: 'Apr 10', comments: 2 }] },
+      { 
+        id: 'list-1', 
+        title: 'To Do', 
+        cards: [
+          { id: 'c-1', content: 'Design MongoDB Schema', label: 'High Priority', dueDate: 'Apr 10', comments: 2, attachments: 1, description: 'Define collections for users and tasks.' },
+          { id: 'c-2', content: 'Setup API Routes', label: 'Feature', dueDate: 'Apr 12', comments: 0, attachments: 0, description: '' }
+        ] 
+      },
       { id: 'list-2', title: 'In Progress', cards: [] }
     ]
   });
