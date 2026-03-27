@@ -38,7 +38,7 @@ export default function Auth({ onLogin }) {
           </div>
           
           <button type="submit" className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl hover:bg-indigo-700 shadow-xl transition-all uppercase text-xs tracking-widest">
-            {isLogin ? 'Enter Workspace' : 'Create Account'}
+            {isLogin ? 'Login' : 'Create Account'}
           </button>
         </form>
 
