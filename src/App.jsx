@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import Auth from './components/auth/Auth';
+import Auth          from './components/auth/Auth';
+import HomeDashboard from './components/dashboard/HomeDashboard';
 import BoardDashboard from './components/boards/BoardDashboard';
 import BoardWorkspace from './components/lists/BoardWorkspace';
-import SearchFilter from './components/search/SearchFilter';
-import UserProfile from './components/profile/UserProfile';
+import SearchFilter  from './components/search/SearchFilter';
+import UserProfile   from './components/profile/UserProfile';
+
 
 export default function App() {
   const [user,        setUser]        = useState(null);
+  const [view,        setView]        = useState('home');
   const [activeBoard, setActiveBoard] = useState(null);
   const [searchOpen,  setSearchOpen]  = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
 
   const [boards, setBoards] = useState([
     { id: 'b1', title: 'Web Engineering Project', desc: 'MERN Stack Development' },
@@ -29,70 +31,115 @@ export default function App() {
     ],
   });
 
+  const [pinnedBoards, setPinnedBoards] = useState(new Set(['b1']));
+
+  const [activity, setActivity] = useState([
+    { id: 'a3', text: 'Added task "Setup API Routes" to Web Engineering Project',      time: '1 day ago',  type: 'card'  },
+    { id: 'a2', text: 'Added task "Design MongoDB Schema" to Web Engineering Project', time: '2 days ago', type: 'card'  },
+    { id: 'a1', text: 'Created board "Web Engineering Project"',                       time: '2 days ago', type: 'board' },
+  ]);
+
+  const addActivity = (entry) =>
+    setActivity(prev => [{ ...entry, id: `a-${Date.now()}-${Math.random()}`, time: 'just now' }, ...prev]);
+
+  const handleTogglePin = (boardId) => {
+    const name = boards.find(b => b.id === boardId)?.title ?? '';
+    setPinnedBoards(prev => {
+      const next = new Set(prev);
+      if (next.has(boardId)) { next.delete(boardId); addActivity({ text: `Unpinned "${name}"`, type: 'pin' }); }
+      else                   { next.add(boardId);    addActivity({ text: `Pinned "${name}"`,   type: 'pin' }); }
+      return next;
+    });
+  };
+
+  const handleCreateBoard = (title) => {
+    const id = `b${Date.now()}`;
+    setBoards(prev => [...prev, { id, title, desc: 'Project Workspace' }]);
+    addActivity({ text: `Created board "${title}"`, type: 'board' });
+  };
+
+  const openBoard = (board) => { setActiveBoard(board); setView('workspace'); };
+  const goHome    = ()       => { setActiveBoard(null);  setView('home');      };
+  const goBoards  = ()       => { setActiveBoard(null);  setView('boards');    };
+  const goProfile = ()       => setView('profile');
+  const doLogout  = ()       => { setUser(null); setView('home'); setActiveBoard(null); };
+
   const searchOverlay = searchOpen && (
     <SearchFilter
       boards={boards}
       boardData={boardData}
       onClose={() => setSearchOpen(false)}
-      onSelectBoard={(board) => {
-        setActiveBoard(board);
-        setProfileOpen(false);
-      }}
+      onSelectBoard={(board) => { openBoard(board); setSearchOpen(false); }}
     />
   );
 
-  if (!user) {
-    return <Auth onLogin={(userData) => setUser(userData)} />;
-  }
+  if (!user) return <Auth onLogin={(u) => setUser(u)} />;
 
-  if (profileOpen) {
-    return (
-      <>
-        <UserProfile
-          user={user}
-          setUser={setUser}
-          boards={boards}
-          boardData={boardData}
-          goBack={() => setProfileOpen(false)}
-          onLogout={() => { setUser(null); setProfileOpen(false); }}
-        />
-        {searchOverlay}
-      </>
-    );
-  }
+  if (view === 'profile') return (
+    <>
+      <UserProfile
+        user={user} setUser={setUser}
+        boards={boards} boardData={boardData}
+        goBack={goHome} onLogout={doLogout}
+      />
+      {searchOverlay}
+    </>
+  );
 
-  if (activeBoard) {
+  if (view === 'workspace' && activeBoard) {
     const activeLists = boardData[activeBoard.id] || [
       { id: `l1-${Date.now()}`, title: 'To Do',       cards: [] },
       { id: `l2-${Date.now()}`, title: 'In Progress', cards: [] },
     ];
-
     return (
       <>
         <BoardWorkspace
           board={activeBoard}
-          goBack={() => setActiveBoard(null)}
+          goBack={goHome}
           lists={activeLists}
-          setLists={(newLists) => setBoardData({ ...boardData, [activeBoard.id]: newLists })}
+          setLists={(nl) => setBoardData(prev => ({ ...prev, [activeBoard.id]: nl }))}
           onOpenSearch={() => setSearchOpen(true)}
-          onOpenProfile={() => setProfileOpen(true)}
+          onOpenProfile={goProfile}
           user={user}
+          addActivity={addActivity}
         />
         {searchOverlay}
       </>
     );
   }
 
-  return (
+  if (view === 'boards') return (
     <>
       <BoardDashboard
         user={user}
         boards={boards}
-        setBoards={setBoards}
-        onLogout={() => setUser(null)}
-        onSelectBoard={(board) => setActiveBoard(board)}
+        pinnedBoards={pinnedBoards}
+        onTogglePin={handleTogglePin}
+        onCreateBoard={handleCreateBoard}
+        onLogout={doLogout}
+        onSelectBoard={openBoard}
         onOpenSearch={() => setSearchOpen(true)}
-        onOpenProfile={() => setProfileOpen(true)}
+        onOpenProfile={goProfile}
+        goHome={goHome}
+      />
+      {searchOverlay}
+    </>
+  );
+
+  return (
+    <>
+      <HomeDashboard
+        user={user}
+        boards={boards}
+        boardData={boardData}
+        pinnedBoards={pinnedBoards}
+        onTogglePin={handleTogglePin}
+        activity={activity}
+        onSelectBoard={openBoard}
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenProfile={goProfile}
+        onGoToBoards={goBoards}
+        onLogout={doLogout}
       />
       {searchOverlay}
     </>

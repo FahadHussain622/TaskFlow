@@ -3,50 +3,51 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { ArrowLeft, Plus, MessageSquare, Paperclip, Calendar, Search } from 'lucide-react';
 
 function initials(name = '') {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0].toUpperCase())
-    .join('');
+  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 }
 
 export default function BoardWorkspace({
-  board, goBack, lists, setLists, onOpenSearch, onOpenProfile, user,
+  board, goBack, lists, setLists,
+  onOpenSearch, onOpenProfile, user, addActivity,
 }) {
   const [selectedCard, setSelectedCard] = useState(null);
 
-  const onDragEnd = (result) => {
-    const { source, destination } = result;
+  const onDragEnd = ({ source, destination }) => {
     if (!destination) return;
     const srcIdx  = lists.findIndex(l => l.id === source.droppableId);
     const dstIdx  = lists.findIndex(l => l.id === destination.droppableId);
-    const newLists = [...lists];
-    const srcCards = [...newLists[srcIdx].cards];
-    const dstCards = source.droppableId === destination.droppableId
-      ? srcCards
-      : [...newLists[dstIdx].cards];
-    const [moved] = srcCards.splice(source.index, 1);
+    const nl      = [...lists];
+    const srcCards = [...nl[srcIdx].cards];
+    const dstCards = source.droppableId === destination.droppableId ? srcCards : [...nl[dstIdx].cards];
+    const [moved]  = srcCards.splice(source.index, 1);
     dstCards.splice(destination.index, 0, moved);
-    newLists[srcIdx].cards = srcCards;
-    newLists[dstIdx].cards = dstCards;
-    setLists(newLists);
+    nl[srcIdx].cards = srcCards;
+    nl[dstIdx].cards = dstCards;
+    setLists(nl);
+
+    if (source.droppableId !== destination.droppableId) {
+      const destList = lists.find(l => l.id === destination.droppableId);
+      addActivity?.({
+        text: `Moved "${moved.content}" → ${destList?.title ?? 'new list'} in ${board.title}`,
+        type: 'card',
+      });
+    }
   };
 
   const handleAddCard = (listId) => {
     const content = window.prompt('Task Title:');
     if (!content) return;
-    setLists(lists.map(list =>
-      list.id === listId
-        ? { ...list, cards: [...list.cards, { id: `c-${Date.now()}`, content, label: '', dueDate: '', comments: 0, attachments: 0, description: '' }] }
-        : list
-    ));
+    const newCard = { id: `c-${Date.now()}`, content, label: '', dueDate: '', comments: 0, attachments: 0, description: '' };
+    setLists(lists.map(l => l.id === listId ? { ...l, cards: [...l.cards, newCard] } : l));
+    const listTitle = lists.find(l => l.id === listId)?.title ?? '';
+    addActivity?.({ text: `Added task "${content}" to ${board.title} › ${listTitle}`, type: 'card' });
   };
 
   const handleAddList = () => {
     const title = window.prompt('List Title:');
     if (!title) return;
     setLists([...lists, { id: `list-${Date.now()}`, title, cards: [] }]);
+    addActivity?.({ text: `Added list "${title}" to ${board.title}`, type: 'list' });
   };
 
   const getLabelColor = (label) => {
@@ -72,7 +73,7 @@ export default function BoardWorkspace({
           </button>
           <div>
             <h1 className="text-lg font-black text-slate-800">{board.title}</h1>
-            <p className="text-[10px] font-black text-black uppercase tracking-widest">Active Workspace</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Workspace</p>
           </div>
         </div>
 
@@ -80,19 +81,17 @@ export default function BoardWorkspace({
           <button
             onClick={onOpenSearch}
             className="flex items-center gap-2 bg-slate-100 hover:bg-indigo-600 hover:text-white
-                       text-slate-500 px-4 py-2.5 rounded-xl transition-all text-[10px] font-black
-                       uppercase tracking-widest"
-            title="Search & Filter tasks"
+                       text-slate-500 px-4 py-2.5 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest"
           >
-            <Search size={15} />
+            <Search size={14} />
             <span className="hidden sm:inline">Search</span>
           </button>
 
           <button
             onClick={onOpenProfile}
-            className="relative w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white
-                       flex items-center justify-center text-xs font-black text-white
-                       hover:ring-2 hover:ring-indigo-400 transition-all overflow-hidden shadow-md"
+            className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white flex items-center
+                       justify-center text-xs font-black text-white hover:ring-2 hover:ring-indigo-400
+                       transition-all overflow-hidden shadow-md"
             title="My Profile"
           >
             {user?.avatar
@@ -106,7 +105,7 @@ export default function BoardWorkspace({
       <div className="flex-1 overflow-x-auto p-8 scrollbar-hide">
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-8 items-start h-full">
-            {lists.map((list) => (
+            {lists.map(list => (
               <div
                 key={list.id}
                 className="bg-white/70 backdrop-blur-xl border border-white w-[320px] rounded-[32px]
@@ -145,9 +144,9 @@ export default function BoardWorkspace({
                               )}
                               <p className="text-sm font-bold text-slate-700 leading-relaxed mb-4">{card.content}</p>
                               <div className="flex items-center gap-3 text-slate-400">
-                                {card.dueDate     && <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg"><Calendar size={12} /> {card.dueDate}</div>}
-                                {card.comments    > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><MessageSquare size={12} /> {card.comments}</div>}
-                                {card.attachments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><Paperclip size={12} /> {card.attachments}</div>}
+                                {card.dueDate     && <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg"><Calendar size={12} />{card.dueDate}</div>}
+                                {card.comments    > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><MessageSquare size={12} />{card.comments}</div>}
+                                {card.attachments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><Paperclip size={12} />{card.attachments}</div>}
                               </div>
                             </div>
                           )}
@@ -183,7 +182,7 @@ export default function BoardWorkspace({
 
       {selectedCard && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden relative">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden">
             <div className="p-10 border-b border-slate-100">
               <div className="flex justify-between items-start mb-4">
                 <h2 className="text-3xl font-black text-slate-800 tracking-tight">{selectedCard.content}</h2>
@@ -206,14 +205,14 @@ export default function BoardWorkspace({
                                bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white
                                transition-all resize-none"
                     rows="4"
-                    placeholder="Add a detailed description..."
+                    placeholder="Add a detailed description…"
                   />
                 </div>
                 <div>
                   <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Attachments</h3>
-                  <div className="border-2 border-dashed border-slate-100 rounded-3xl p-10 text-center text-[10px]
-                                  font-black text-slate-400 uppercase tracking-widest hover:bg-indigo-50
-                                  hover:border-indigo-200 hover:text-indigo-600 cursor-pointer transition-all">
+                  <div className="border-2 border-dashed border-slate-100 rounded-3xl p-10 text-center
+                                  text-[10px] font-black text-slate-400 uppercase tracking-widest
+                                  hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 cursor-pointer transition-all">
                     <Plus size={24} className="mx-auto mb-2 opacity-30" />
                     Upload Files
                   </div>
