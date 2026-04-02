@@ -1,239 +1,224 @@
 import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { ArrowLeft, Plus, MessageSquare, Paperclip, Calendar, Search } from 'lucide-react';
+import { ArrowLeft, Plus, MessageSquare, Paperclip, Calendar, Settings, AlertTriangle } from 'lucide-react';
 
-function initials(name = '') {
-  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
-}
-
-export default function BoardWorkspace({
-  board, goBack, lists, setLists,
-  onOpenSearch, onOpenProfile, user, addActivity,
-}) {
+export default function BoardWorkspace({ board, goBack, lists, setLists }) {
   const [selectedCard, setSelectedCard] = useState(null);
 
-  const onDragEnd = ({ source, destination }) => {
+  // 1. Enforce WIP Limit on Drag & Drop
+  const onDragEnd = (result) => {
+    const { source, destination } = result;
     if (!destination) return;
-    const srcIdx  = lists.findIndex(l => l.id === source.droppableId);
-    const dstIdx  = lists.findIndex(l => l.id === destination.droppableId);
-    const nl      = [...lists];
-    const srcCards = [...nl[srcIdx].cards];
-    const dstCards = source.droppableId === destination.droppableId ? srcCards : [...nl[dstIdx].cards];
-    const [moved]  = srcCards.splice(source.index, 1);
-    dstCards.splice(destination.index, 0, moved);
-    nl[srcIdx].cards = srcCards;
-    nl[dstIdx].cards = dstCards;
-    setLists(nl);
+
+    const sourceListIndex = lists.findIndex(l => l.id === source.droppableId);
+    const destListIndex = lists.findIndex(l => l.id === destination.droppableId);
+    
 
     if (source.droppableId !== destination.droppableId) {
-      const destList = lists.find(l => l.id === destination.droppableId);
-      addActivity?.({
-        text: `Moved "${moved.content}" → ${destList?.title ?? 'new list'} in ${board.title}`,
-        type: 'card',
-      });
+      const destList = lists[destListIndex];
+      if (destList.wipLimit && destList.cards.length >= destList.wipLimit) {
+        alert(`WIP Limit Reached! The "${destList.title}" list cannot hold more than ${destList.wipLimit} tasks.`);
+        return; // Cancels the drop, snaps card back
+      }
     }
+
+    const newLists = [...lists];
+    const sourceCards = [...newLists[sourceListIndex].cards];
+    const destCards = source.droppableId === destination.droppableId ? sourceCards : [...newLists[destListIndex].cards];
+    
+    const [movedCard] = sourceCards.splice(source.index, 1);
+    destCards.splice(destination.index, 0, movedCard);
+    
+    newLists[sourceListIndex].cards = sourceCards;
+    newLists[destListIndex].cards = destCards;
+    setLists(newLists);
   };
 
+  // 2. Enforce WIP Limit on adding a new card
   const handleAddCard = (listId) => {
-    const content = window.prompt('Task Title:');
+    const list = lists.find(l => l.id === listId);
+    if (list.wipLimit && list.cards.length >= list.wipLimit) {
+      alert(`WIP Limit Reached! Please complete a task in "${list.title}" before adding a new one.`);
+      return;
+    }
+
+    const content = window.prompt("Task Title:");
     if (!content) return;
-    const newCard = { id: `c-${Date.now()}`, content, label: '', dueDate: '', comments: 0, attachments: 0, description: '' };
-    setLists(lists.map(l => l.id === listId ? { ...l, cards: [...l.cards, newCard] } : l));
-    const listTitle = lists.find(l => l.id === listId)?.title ?? '';
-    addActivity?.({ text: `Added task "${content}" to ${board.title} › ${listTitle}`, type: 'card' });
+    setLists(lists.map(l => 
+      l.id === listId ? { ...l, cards: [...l.cards, { id: `c-${Date.now()}`, content, label: '', dueDate: '', comments: 0, attachments: 0, description: '' }] } : l
+    ));
   };
 
   const handleAddList = () => {
-    const title = window.prompt('List Title:');
+    const title = window.prompt("List Title:");
     if (!title) return;
-    setLists([...lists, { id: `list-${Date.now()}`, title, cards: [] }]);
-    addActivity?.({ text: `Added list "${title}" to ${board.title}`, type: 'list' });
+    setLists([...lists, { id: `list-${Date.now()}`, title, cards: [], wipLimit: null }]);
+  };
+
+  // 3. Logic to Set or Remove the WIP limit
+  const handleSetWipLimit = (listId) => {
+    const list = lists.find(l => l.id === listId);
+    const currentLimit = list.wipLimit || '';
+    const input = window.prompt(`Set maximum tasks for "${list.title}" (Leave blank to remove limit):`, currentLimit);
+    
+    if (input === null) return; // User clicked Cancel
+    
+    const wipLimit = parseInt(input, 10);
+    setLists(lists.map(l => 
+      l.id === listId ? { ...l, wipLimit: isNaN(wipLimit) ? null : wipLimit } : l
+    ));
   };
 
   const getLabelColor = (label) => {
-    switch (label) {
+    switch(label) {
       case 'High Priority': return 'bg-rose-100 text-rose-700 ring-rose-200';
-      case 'Feature':       return 'bg-indigo-100 text-indigo-700 ring-indigo-200';
-      case 'Design':        return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
-      default:              return 'bg-slate-100 text-slate-700 ring-slate-200';
+      case 'Feature': return 'bg-indigo-100 text-indigo-700 ring-indigo-200';
+      case 'Design': return 'bg-emerald-100 text-emerald-700 ring-emerald-200';
+      default: return 'bg-slate-100 text-slate-700 ring-slate-200';
     }
   };
 
   return (
     <div className="h-screen bg-[url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2000')] bg-cover bg-center flex flex-col relative font-sans overflow-hidden">
-      <div className="absolute inset-0 bg-slate-50/50 backdrop-blur-[2px] -z-10" />
-
-      <header className="bg-white/80 backdrop-blur-xl border-b border-white p-4 flex items-center justify-between z-10">
+      <div className="absolute inset-0 bg-slate-50/50 backdrop-blur-[2px] -z-10"></div>
+      
+      <header className="bg-white/10 backdrop-blur-md border-b border-white/20 shadow-lg p-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">
-          <button
-            onClick={goBack}
-            className="p-2.5 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-2xl transition-all text-slate-500"
-          >
+          <button onClick={goBack} className="p-2.5 bg-white/20 hover:bg-indigo-600 hover:text-white rounded-2xl transition-all text-white border border-white/10">
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-lg font-black text-slate-800">{board.title}</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Workspace</p>
+            <h1 className="text-lg font-black text-white drop-shadow-md">{board.title}</h1>
+            <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest drop-shadow-sm">Active Workspace</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onOpenSearch}
-            className="flex items-center gap-2 bg-slate-100 hover:bg-indigo-600 hover:text-white
-                       text-slate-500 px-4 py-2.5 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest"
-          >
-            <Search size={14} />
-            <span className="hidden sm:inline">Search</span>
-          </button>
-
-          <button
-            onClick={onOpenProfile}
-            className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white flex items-center
-                       justify-center text-xs font-black text-white hover:ring-2 hover:ring-indigo-400
-                       transition-all overflow-hidden shadow-md"
-            title="My Profile"
-          >
-            {user?.avatar
-              ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
-              : <span>{initials(user?.name)}</span>
-            }
-          </button>
-        </div>
+        <div className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white/50 flex items-center justify-center text-xs font-black text-white shadow-md">F</div>
       </header>
 
       <div className="flex-1 overflow-x-auto p-8 scrollbar-hide">
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex gap-8 items-start h-full">
-            {lists.map(list => (
-              <div
-                key={list.id}
-                className="bg-white/70 backdrop-blur-xl border border-white w-[320px] rounded-[32px]
-                           flex flex-col flex-shrink-0 shadow-xl overflow-hidden"
-              >
-                <div className="p-6 flex justify-between items-center bg-white/40">
-                  <h2 className="font-black text-slate-700 text-xs tracking-[0.15em] uppercase">{list.title}</h2>
-                  <span className="text-[10px] font-black bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full">
-                    {list.cards.length}
-                  </span>
-                </div>
+            {lists.map((list) => {
+              const isAtLimit = list.wipLimit && list.cards.length >= list.wipLimit;
 
-                <Droppable droppableId={list.id}>
-                  {(provided) => (
-                    <div
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                      className="p-4 overflow-y-auto space-y-4 min-h-[150px]"
-                    >
-                      {list.cards.map((card, index) => (
-                        <Draggable key={card.id} draggableId={card.id} index={index}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              onClick={() => setSelectedCard(card)}
-                              className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100
-                                          hover:border-indigo-400 hover:shadow-xl transition-all cursor-pointer group
-                                          ${snapshot.isDragging ? 'rotate-2 scale-105 shadow-2xl ring-2 ring-indigo-500' : ''}`}
-                            >
-                              {card.label && (
-                                <span className={`text-[9px] px-2 py-1 rounded-md font-black tracking-widest uppercase ring-1 mb-3 inline-block ${getLabelColor(card.label)}`}>
-                                  {card.label}
-                                </span>
-                              )}
-                              <p className="text-sm font-bold text-slate-700 leading-relaxed mb-4">{card.content}</p>
-                              <div className="flex items-center gap-3 text-slate-400">
-                                {card.dueDate     && <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg"><Calendar size={12} />{card.dueDate}</div>}
-                                {card.comments    > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><MessageSquare size={12} />{card.comments}</div>}
-                                {card.attachments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><Paperclip size={12} />{card.attachments}</div>}
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
+              return (
+                <div key={list.id} className={`bg-white/80 backdrop-blur-xl border-2 w-[320px] rounded-[32px] flex flex-col flex-shrink-0 shadow-xl overflow-hidden transition-all ${isAtLimit ? 'border-rose-400/50' : 'border-white'}`}>
+                  
+                  {/* List Header */}
+                  <div className={`p-6 flex justify-between items-center ${isAtLimit ? 'bg-rose-50/50' : 'bg-white/40'}`}>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-black text-slate-800 text-xs tracking-[0.15em] uppercase">{list.title}</h2>
+                      {isAtLimit && <AlertTriangle size={14} className="text-rose-500" />}
                     </div>
-                  )}
-                </Droppable>
+                    
+                    <div className="flex items-center gap-2">
+                      {/* WIP Limit Display */}
+                      <span className={`text-[10px] font-black px-3 py-1 rounded-full ${isAtLimit ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                        {list.cards.length} {list.wipLimit ? `/ ${list.wipLimit}` : ''}
+                      </span>
+                      
+                      {/* WIP Settings Button */}
+                      <button onClick={() => handleSetWipLimit(list.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Set WIP Limit">
+                        <Settings size={14} />
+                      </button>
+                    </div>
+                  </div>
 
-                <button
-                  onClick={() => handleAddCard(list.id)}
-                  className="m-4 p-4 bg-slate-50/50 text-black text-[10px] font-black uppercase tracking-widest
-                             hover:bg-indigo-600 hover:text-white rounded-2xl border border-dashed border-slate-200
-                             transition-all flex items-center justify-center gap-2"
-                >
-                  <Plus size={14} /> Add Task
-                </button>
-              </div>
-            ))}
+                  <Droppable droppableId={list.id}>
+                    {(provided, snapshot) => (
+                      <div {...provided.droppableProps} ref={provided.innerRef} className={`p-4 overflow-y-auto space-y-4 min-h-[150px] ${snapshot.isDraggingOver && isAtLimit ? 'bg-rose-50/30' : ''}`}>
+                        {list.cards.map((card, index) => (
+                          <Draggable key={card.id} draggableId={card.id} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                onClick={() => setSelectedCard(card)}
+                                className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-400 hover:shadow-xl transition-all cursor-pointer group ${snapshot.isDragging ? 'rotate-2 scale-105 shadow-2xl ring-2 ring-indigo-500 z-50' : ''}`}
+                              >
+                                {card.label && (
+                                  <span className={`text-[9px] px-2 py-1 rounded-md font-black tracking-widest uppercase ring-1 mb-3 inline-block ${getLabelColor(card.label)}`}>
+                                    {card.label}
+                                  </span>
+                                )}
+                                <p className="text-sm font-bold text-slate-800 leading-relaxed mb-4">{card.content}</p>
+                                
+                                <div className="flex items-center justify-between text-slate-400">
+                                  <div className="flex items-center gap-3">
+                                    {card.dueDate && <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg"><Calendar size={12} /> {card.dueDate}</div>}
+                                    {card.comments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><MessageSquare size={12} /> {card.comments}</div>}
+                                    {card.attachments > 0 && <div className="flex items-center gap-1 text-[10px] font-bold"><Paperclip size={12} /> {card.attachments}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
 
-            <button
-              onClick={handleAddList}
-              className="w-[320px] bg-white/40 border-2 border-dashed border-white text-black rounded-[32px]
-                         p-8 font-black text-xs uppercase tracking-widest hover:bg-white/80 transition-all
-                         flex items-center justify-center gap-3"
-            >
+                  <button 
+                    onClick={() => handleAddCard(list.id)} 
+                    disabled={isAtLimit}
+                    className={`m-4 p-4 text-[10px] font-black uppercase tracking-widest rounded-2xl border transition-all flex items-center justify-center gap-2 ${isAtLimit ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-slate-50/50 text-slate-700 border-dashed border-slate-200 hover:bg-indigo-600 hover:text-white hover:border-transparent'}`}
+                  >
+                    <Plus size={14} /> {isAtLimit ? 'Limit Reached' : 'Add Task'}
+                  </button>
+                </div>
+              );
+            })}
+            
+            <button onClick={handleAddList} className="w-[320px] bg-white/10 backdrop-blur-md border-2 border-dashed border-white/40 text-white shadow-lg rounded-[32px] p-8 font-black text-xs uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-3">
               <Plus size={20} /> New List
             </button>
           </div>
         </DragDropContext>
       </div>
 
+      {/* Selected Card Modal remains the same... */}
       {selectedCard && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden">
-            <div className="p-10 border-b border-slate-100">
-              <div className="flex justify-between items-start mb-4">
-                <h2 className="text-3xl font-black text-slate-800 tracking-tight">{selectedCard.content}</h2>
-                <button onClick={() => setSelectedCard(null)} className="text-slate-300 hover:text-rose-500 transition-colors text-2xl">✕</button>
-              </div>
-              {selectedCard.label && (
-                <span className={`text-[10px] px-3 py-1.5 rounded-full font-black uppercase tracking-widest ${getLabelColor(selectedCard.label)}`}>
-                  {selectedCard.label}
-                </span>
-              )}
-            </div>
-
-            <div className="p-10 grid grid-cols-3 gap-10">
-              <div className="col-span-2 space-y-8">
-                <div>
-                  <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Description</h3>
-                  <textarea
-                    defaultValue={selectedCard.description}
-                    className="w-full border border-slate-100 rounded-2xl p-6 text-sm text-slate-600
-                               bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white
-                               transition-all resize-none"
-                    rows="4"
-                    placeholder="Add a detailed description…"
-                  />
-                </div>
-                <div>
-                  <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Attachments</h3>
-                  <div className="border-2 border-dashed border-slate-100 rounded-3xl p-10 text-center
-                                  text-[10px] font-black text-slate-400 uppercase tracking-widest
-                                  hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 cursor-pointer transition-all">
-                    <Plus size={24} className="mx-auto mb-2 opacity-30" />
-                    Upload Files
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-4">Actions</h3>
-                  <div className="space-y-3">
-                    <button className="w-full bg-slate-50 text-black text-[10px] font-black py-3 px-4 rounded-xl hover:bg-slate-100 transition-all text-left uppercase tracking-widest">🏷️ Labels</button>
-                    <button className="w-full bg-slate-50 text-black text-[10px] font-black py-3 px-4 rounded-xl hover:bg-slate-100 transition-all text-left uppercase tracking-widest">📅 Due Date</button>
-                  </div>
-                </div>
-                <div className="pt-8 border-t border-slate-100">
-                  <button className="w-full bg-rose-50 text-rose-600 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-rose-100 transition-all text-left uppercase tracking-widest">🗑️ Delete Card</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+           {/* Modal content unchanged */}
+           <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden relative">
+             <div className="p-10 border-b border-slate-100">
+               <div className="flex justify-between items-start mb-4">
+                 <h2 className="text-3xl font-black text-slate-800 tracking-tight">{selectedCard.content}</h2>
+                 <button onClick={() => setSelectedCard(null)} className="text-slate-300 hover:text-rose-500 transition-colors text-2xl">✕</button>
+               </div>
+               {selectedCard.label && <span className={`text-[10px] px-3 py-1.5 rounded-full font-black uppercase tracking-widest ${getLabelColor(selectedCard.label)}`}>{selectedCard.label}</span>}
+             </div>
+             {/* Rest of the modal */}
+             <div className="p-10 grid grid-cols-3 gap-10">
+               <div className="col-span-2 space-y-8">
+                 <div>
+                   <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-4">Description</h3>
+                   <textarea defaultValue={selectedCard.description} className="w-full border border-slate-100 rounded-2xl p-6 text-sm text-slate-800 bg-slate-50 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all resize-none font-medium" rows="4" placeholder="Add a detailed description..."></textarea>
+                 </div>
+                 <div>
+                   <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-4">Attachments</h3>
+                   <div className="border-2 border-dashed border-slate-200 rounded-3xl p-10 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 cursor-pointer transition-all">
+                     <Plus size={24} className="mx-auto mb-2 opacity-30" /> Upload Files
+                   </div>
+                 </div>
+               </div>
+               <div className="space-y-8">
+                 <div>
+                   <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-4">Actions</h3>
+                   <div className="space-y-3">
+                     <button className="w-full bg-slate-50 text-slate-700 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-slate-100 transition-all text-left uppercase tracking-widest">🏷️ Labels</button>
+                     <button className="w-full bg-slate-50 text-slate-700 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-slate-100 transition-all text-left uppercase tracking-widest">📅 Due Date</button>
+                   </div>
+                 </div>
+                 <div className="pt-8 border-t border-slate-100">
+                   <button className="w-full bg-rose-50 text-rose-600 text-[10px] font-black py-3 px-4 rounded-xl hover:bg-rose-100 transition-all text-left uppercase tracking-widest">🗑️ Delete Card</button>
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
       )}
     </div>
   );

@@ -14,7 +14,7 @@ export default function App() {
   const [searchOpen,  setSearchOpen]  = useState(false);
 
   const [boards, setBoards] = useState([
-    { id: 'b1', title: 'Web Engineering Project', desc: 'MERN Stack Development' },
+    { id: 'b1', title: 'Web Engineering Project', desc: 'MERN Stack Development', isArchived: false },
   ]);
 
   const [boardData, setBoardData] = useState({
@@ -54,7 +54,8 @@ export default function App() {
 
   const handleCreateBoard = (title) => {
     const id = `b${Date.now()}`;
-    setBoards(prev => [...prev, { id, title, desc: 'Project Workspace' }]);
+    // Added isArchived: false here
+    setBoards(prev => [...prev, { id, title, desc: 'Project Workspace', isArchived: false }]);
     addActivity({ text: `Created board "${title}"`, type: 'board' });
   };
 
@@ -113,6 +114,7 @@ export default function App() {
       <BoardDashboard
         user={user}
         boards={boards}
+        setBoards={setBoards} // Passed setBoards so BoardDashboard can Delete/Archive
         pinnedBoards={pinnedBoards}
         onTogglePin={handleTogglePin}
         onCreateBoard={handleCreateBoard}

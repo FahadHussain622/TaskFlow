@@ -60,11 +60,11 @@ const ACTIVITY_DOT = {
   delete: 'bg-rose-500',
 };
 
-
+// Updated: Section headings are now white with a subtle drop shadow
 function SectionHeading({ children, action }) {
   return (
     <div className="flex items-center justify-between mb-5">
-      <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">{children}</h2>
+      <h2 className="text-[10px] font-black text-white uppercase tracking-[0.18em] drop-shadow-md">{children}</h2>
       {action}
     </div>
   );
@@ -142,17 +142,18 @@ function BoardCard({ board, boardData, pinned, onSelect, onTogglePin, large }) {
   );
 }
 
+// Updated: Activity text and divider line changed to white/translucent white
 function ActivityItem({ item, isLast }) {
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center flex-shrink-0">
         <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${ACTIVITY_DOT[item.type] || 'bg-slate-300'}`} />
-        {!isLast && <div className="w-px flex-1 bg-slate-100 mt-1" />}
+        {!isLast && <div className="w-px flex-1 bg-white/20 mt-1" />}
       </div>
 
       <div className={`pb-5 ${isLast ? '' : ''}`}>
-        <p className="text-xs font-bold text-slate-700 leading-snug">{item.text}</p>
-        <p className="text-[10px] font-medium text-slate-400 mt-1 flex items-center gap-1">
+        <p className="text-xs font-bold text-white leading-snug drop-shadow-sm">{item.text}</p>
+        <p className="text-[10px] font-medium text-slate-200 mt-1 flex items-center gap-1">
           <Clock size={10} /> {item.time}
         </p>
       </div>
@@ -198,7 +199,7 @@ export default function HomeDashboard({
   }, [boards, boardData]);
 
   const pinnedList   = boards.filter(b => pinnedBoards.has(b.id));
-  const recentBoards = boards.slice(0, 4); // show up to 4 in home grid
+  const recentBoards = boards.slice(0, 4); 
 
   return (
     <div className="min-h-screen bg-[url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2000')] bg-cover bg-center bg-fixed p-8 font-sans relative">
@@ -306,22 +307,24 @@ export default function HomeDashboard({
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8 items-start">
 
           <section>
-            <SectionHeading>
-              All Boards
+            <SectionHeading action={
               <button
                 onClick={onGoToBoards}
-                className="flex items-center gap-1 text-[10px] font-black text-indigo-500 hover:text-indigo-700
-                           uppercase tracking-widest transition-colors"
+                className="flex items-center gap-1 text-[10px] font-black text-indigo-300 hover:text-white
+                           uppercase tracking-widest transition-colors drop-shadow-md"
               >
                 Manage <ArrowRight size={12} />
               </button>
+            }>
+              All Boards
             </SectionHeading>
 
             {boards.length === 0 ? (
-              <div className="bg-white/70 backdrop-blur-xl border border-white rounded-3xl p-12 text-center">
-                <div className="text-4xl mb-3">🗂️</div>
-                <p className="font-black text-slate-700 mb-1">No boards yet</p>
-                <p className="text-xs text-slate-400 mb-5">Create your first board to start organising tasks.</p>
+              // Updated: Frosted glass container for white text readability
+              <div className="bg-white/10 backdrop-blur-md border border-white/20 shadow-lg rounded-3xl p-12 text-center">
+                <div className="text-4xl mb-3 drop-shadow-md">🗂️</div>
+                <p className="font-black text-white text-xl mb-1 drop-shadow-md">No boards yet</p>
+                <p className="text-xs text-slate-200 mb-5">Create your first board to start organising tasks.</p>
                 <button
                   onClick={onGoToBoards}
                   className="bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest
@@ -364,11 +367,12 @@ export default function HomeDashboard({
           <section>
             <SectionHeading>Recent Activity</SectionHeading>
 
-            <div className="bg-white/80 backdrop-blur-xl border border-white rounded-3xl p-6 shadow-sm">
+            {/* Updated: Frosted glass container for white text readability */}
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-6 shadow-lg">
               {activity.length === 0 ? (
                 <div className="text-center py-8">
-                  <div className="text-3xl mb-3">💤</div>
-                  <p className="text-xs font-bold text-slate-400">No activity yet</p>
+                  <div className="text-3xl mb-3 drop-shadow-md">💤</div>
+                  <p className="text-xs font-bold text-white drop-shadow-md">No activity yet</p>
                 </div>
               ) : (
                 <div>
