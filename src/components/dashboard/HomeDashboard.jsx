@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, Star, LayoutDashboard, Plus, Calendar,
-  ArrowRight, ListTodo, AlertCircle, CheckCircle2,
-  Clock, LogOut, User, Layers,
+  ArrowRight, ListTodo, AlertCircle, Clock, LogOut, Layers, Sparkles, Bug
 } from 'lucide-react';
-
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -51,7 +50,6 @@ function boardDoneCount(boardId, boardData) {
     .reduce((sum, list) => sum + list.cards.length, 0);
 }
 
-
 const ACTIVITY_DOT = {
   board:  'bg-indigo-500',
   card:   'bg-emerald-500',
@@ -60,7 +58,6 @@ const ACTIVITY_DOT = {
   delete: 'bg-rose-500',
 };
 
-// Updated: Section headings are now white with a subtle drop shadow
 function SectionHeading({ children, action }) {
   return (
     <div className="flex items-center justify-between mb-5">
@@ -142,7 +139,6 @@ function BoardCard({ board, boardData, pinned, onSelect, onTogglePin, large }) {
   );
 }
 
-// Updated: Activity text and divider line changed to white/translucent white
 function ActivityItem({ item, isLast }) {
   return (
     <div className="flex gap-3">
@@ -161,7 +157,6 @@ function ActivityItem({ item, isLast }) {
   );
 }
 
-
 export default function HomeDashboard({
   user,
   boards,
@@ -169,15 +164,17 @@ export default function HomeDashboard({
   pinnedBoards,
   onTogglePin,
   activity,
-  onSelectBoard,
   onOpenSearch,
-  onOpenProfile,
-  onGoToBoards,
   onLogout,
 }) {
+  const navigate = useNavigate();
+
   const stats = useMemo(() => {
     const allCards = [];
     let completed = 0;
+    let highPri = 0;
+    let featureCount = 0;
+    let bugCount = 0;
 
     Object.entries(boardData).forEach(([, lists]) => {
       lists.forEach(list => {
@@ -185,6 +182,9 @@ export default function HomeDashboard({
         list.cards.forEach(card => {
           allCards.push(card);
           if (isDone) completed++;
+          if (card.label === 'High Priority') highPri++;
+          else if (card.label === 'Feature') featureCount++;
+          else if (card.label === 'Bug') bugCount++;
         });
       });
     });
@@ -193,7 +193,9 @@ export default function HomeDashboard({
       boards:      boards.length,
       total:       allCards.length,
       completed,
-      highPri:     allCards.filter(c => c.label === 'High Priority').length,
+      highPri,
+      featureCount,
+      bugCount,
       dueThisWeek: allCards.filter(c => isThisWeek(c.dueDate)).length,
     };
   }, [boards, boardData]);
@@ -229,7 +231,7 @@ export default function HomeDashboard({
             </button>
 
             <button
-              onClick={onGoToBoards}
+              onClick={() => navigate('/boards')}
               className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white
                          text-indigo-600 px-4 py-2.5 rounded-xl transition-all text-[10px] font-black uppercase tracking-widest"
             >
@@ -238,7 +240,7 @@ export default function HomeDashboard({
             </button>
 
             <button
-              onClick={onOpenProfile}
+              onClick={() => navigate('/profile')}
               className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white flex items-center
                          justify-center text-xs font-black text-white hover:ring-2 hover:ring-indigo-400
                          transition-all overflow-hidden shadow-md"
@@ -272,12 +274,13 @@ export default function HomeDashboard({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-          <StatCard icon={LayoutDashboard} value={stats.boards}      label="Boards"        accent="indigo" />
-          <StatCard icon={ListTodo}        value={stats.total}        label="Total Tasks"   accent="indigo"
-                    sub={stats.completed > 0 ? `${stats.completed} completed` : null} />
-          <StatCard icon={AlertCircle}     value={stats.highPri}      label="High Priority" accent="rose" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
+          <StatCard icon={LayoutDashboard} value={stats.boards}       label="Boards"        accent="indigo" />
+          <StatCard icon={ListTodo}        value={stats.total}        label="Total Tasks"   accent="indigo" sub={stats.completed > 0 ? `${stats.completed} completed` : null} />
           <StatCard icon={Calendar}        value={stats.dueThisWeek}  label="Due This Week" accent="amber" />
+          <StatCard icon={AlertCircle}     value={stats.highPri}      label="High Priority" accent="rose" />
+          <StatCard icon={Sparkles}        value={stats.featureCount} label="Features"      accent="emerald" />
+          <StatCard icon={Bug}             value={stats.bugCount}     label="Bugs"          accent="rose" />
         </div>
 
         {pinnedList.length > 0 && (
@@ -295,7 +298,7 @@ export default function HomeDashboard({
                   board={board}
                   boardData={boardData}
                   pinned
-                  onSelect={onSelectBoard}
+                  onSelect={(board) => navigate(`/b/${board.id}`)}
                   onTogglePin={onTogglePin}
                   large
                 />
@@ -309,7 +312,7 @@ export default function HomeDashboard({
           <section>
             <SectionHeading action={
               <button
-                onClick={onGoToBoards}
+                onClick={() => navigate('/boards')}
                 className="flex items-center gap-1 text-[10px] font-black text-indigo-300 hover:text-white
                            uppercase tracking-widest transition-colors drop-shadow-md"
               >
@@ -320,13 +323,12 @@ export default function HomeDashboard({
             </SectionHeading>
 
             {boards.length === 0 ? (
-              // Updated: Frosted glass container for white text readability
               <div className="bg-white/10 backdrop-blur-md border border-white/20 shadow-lg rounded-3xl p-12 text-center">
                 <div className="text-4xl mb-3 drop-shadow-md">🗂️</div>
                 <p className="font-black text-white text-xl mb-1 drop-shadow-md">No boards yet</p>
                 <p className="text-xs text-slate-200 mb-5">Create your first board to start organising tasks.</p>
                 <button
-                  onClick={onGoToBoards}
+                  onClick={() => navigate('/boards')}
                   className="bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest
                              px-6 py-3 rounded-2xl hover:bg-indigo-700 transition-all inline-flex items-center gap-2"
                 >
@@ -341,13 +343,13 @@ export default function HomeDashboard({
                     board={board}
                     boardData={boardData}
                     pinned={pinnedBoards.has(board.id)}
-                    onSelect={onSelectBoard}
+                    onSelect={(board) => navigate(`/b/${board.id}`)}
                     onTogglePin={onTogglePin}
                   />
                 ))}
 
                 <div
-                  onClick={onGoToBoards}
+                  onClick={() => navigate('/boards')}
                   className="bg-white/40 border-2 border-dashed border-slate-200 rounded-3xl p-6 flex flex-col
                              items-center justify-center gap-2 cursor-pointer hover:bg-white/70 hover:border-indigo-300
                              transition-all group min-h-[120px]"
@@ -367,7 +369,6 @@ export default function HomeDashboard({
           <section>
             <SectionHeading>Recent Activity</SectionHeading>
 
-            {/* Updated: Frosted glass container for white text readability */}
             <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-6 shadow-lg">
               {activity.length === 0 ? (
                 <div className="text-center py-8">

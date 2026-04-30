@@ -1,18 +1,13 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Camera, User, Lock, Trash2,
   Check, Eye, EyeOff, AlertTriangle, Save,
   Mail, ShieldCheck, LayoutDashboard, ListTodo,
 } from 'lucide-react';
 
-
 function initials(name = '') {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0].toUpperCase())
-    .join('');
+  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 }
 
 function countTasks(boardData) {
@@ -22,7 +17,6 @@ function countTasks(boardData) {
   );
   return total;
 }
-
 
 function FieldLabel({ children }) {
   return (
@@ -36,10 +30,7 @@ function TextInput({ value, onChange, type = 'text', placeholder, disabled, icon
   return (
     <div className="relative">
       {Icon && (
-        <Icon
-          size={15}
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none"
-        />
+        <Icon size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
       )}
       <input
         type={type}
@@ -66,7 +57,6 @@ function SaveToast({ show }) {
     </div>
   );
 }
-
 
 function PersonalInfoTab({ user, onSave }) {
   const [name,    setName]    = useState(user.name  || '');
@@ -102,9 +92,7 @@ function PersonalInfoTab({ user, onSave }) {
         <TextInput value={email} onChange={handleChange(setEmail)} placeholder="you@example.com" type="email" icon={Mail} />
       </div>
 
-      {error && (
-        <p className="text-[11px] font-bold text-rose-500 bg-rose-50 px-4 py-3 rounded-xl">{error}</p>
-      )}
+      {error && <p className="text-[11px] font-bold text-rose-500 bg-rose-50 px-4 py-3 rounded-xl">{error}</p>}
 
       <button
         onClick={handleSave}
@@ -120,7 +108,6 @@ function PersonalInfoTab({ user, onSave }) {
     </div>
   );
 }
-
 
 function PasswordField({ label, value, onChange, placeholder }) {
   const [visible, setVisible] = useState(false);
@@ -165,10 +152,7 @@ function StrengthBar({ password }) {
     <div className="flex items-center gap-3 mt-2">
       <div className="flex gap-1 flex-1">
         {[1, 2, 3, 4].map(i => (
-          <div
-            key={i}
-            className={`h-1 flex-1 rounded-full transition-all ${i <= score ? colors[score] : 'bg-slate-100'}`}
-          />
+          <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= score ? colors[score] : 'bg-slate-100'}`} />
         ))}
       </div>
       {score > 0 && (
@@ -215,9 +199,7 @@ function SecurityTab() {
       </div>
       <PasswordField label="Confirm New Password" value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }} placeholder="••••••••" />
 
-      {error && (
-        <p className="text-[11px] font-bold text-rose-500 bg-rose-50 px-4 py-3 rounded-xl">{error}</p>
-      )}
+      {error && <p className="text-[11px] font-bold text-rose-500 bg-rose-50 px-4 py-3 rounded-xl">{error}</p>}
 
       <button
         onClick={handleSave}
@@ -231,7 +213,6 @@ function SecurityTab() {
     </div>
   );
 }
-
 
 function DangerZoneTab({ user, onDeleteAccount }) {
   const [step,    setStep]    = useState('idle');
@@ -307,14 +288,14 @@ function DangerZoneTab({ user, onDeleteAccount }) {
   );
 }
 
-
 const TABS = [
   { id: 'info',     label: 'Personal Info',  icon: User       },
   { id: 'security', label: 'Security',       icon: Lock       },
   { id: 'danger',   label: 'Danger Zone',    icon: Trash2     },
 ];
 
-export default function UserProfile({ user, setUser, boards, boardData, goBack, onLogout }) {
+export default function UserProfile({ user, setUser, boards, boardData, onLogout }) {
+  const navigate = useNavigate();
   const [activeTab,  setActiveTab]  = useState('info');
   const [avatarSrc,  setAvatarSrc]  = useState(user.avatar || null);
   const fileInputRef = useRef(null);
@@ -356,7 +337,7 @@ export default function UserProfile({ user, setUser, boards, boardData, goBack, 
 
         <header className="flex items-center gap-4 mb-8 bg-white/80 backdrop-blur-xl p-4 rounded-3xl border border-white shadow-sm">
           <button
-            onClick={goBack}
+            onClick={() => navigate('/')}
             className="p-2.5 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-2xl transition-all text-slate-500"
           >
             <ArrowLeft size={18} />

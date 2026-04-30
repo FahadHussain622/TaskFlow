@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import Auth          from './components/auth/Auth';
 import HomeDashboard from './components/dashboard/HomeDashboard';
 import BoardDashboard from './components/boards/BoardDashboard';
@@ -6,38 +7,70 @@ import BoardWorkspace from './components/lists/BoardWorkspace';
 import SearchFilter  from './components/search/SearchFilter';
 import UserProfile   from './components/profile/UserProfile';
 
-
 export default function App() {
-  const [user,        setUser]        = useState(null);
-  const [view,        setView]        = useState('home');
-  const [activeBoard, setActiveBoard] = useState(null);
-  const [searchOpen,  setSearchOpen]  = useState(false);
-
-  const [boards, setBoards] = useState([
-    { id: 'b1', title: 'Web Engineering Project', desc: 'MERN Stack Development', isArchived: false },
-  ]);
-
-  const [boardData, setBoardData] = useState({
-    'b1': [
-      {
-        id: 'list-1',
-        title: 'To Do',
-        cards: [
-          { id: 'c-1', content: 'Design MongoDB Schema', label: 'High Priority', dueDate: 'Apr 10', comments: 2, attachments: 1, description: 'Define collections for users and tasks.' },
-          { id: 'c-2', content: 'Setup API Routes',      label: 'Feature',       dueDate: 'Apr 12', comments: 0, attachments: 0, description: '' },
-        ],
-      },
-      { id: 'list-2', title: 'In Progress', cards: [] },
-    ],
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
   });
+  
+  const [searchOpen,  setSearchOpen]  = useState(false);
+  const [boards, setBoards] = useState([]);
+  const [boardData, setBoardData] = useState({});
+  const [pinnedBoards, setPinnedBoards] = useState(new Set());
+  const [activity, setActivity] = useState([]);
 
-  const [pinnedBoards, setPinnedBoards] = useState(new Set(['b1']));
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [activity, setActivity] = useState([
-    { id: 'a3', text: 'Added task "Setup API Routes" to Web Engineering Project',      time: '1 day ago',  type: 'card'  },
-    { id: 'a2', text: 'Added task "Design MongoDB Schema" to Web Engineering Project', time: '2 days ago', type: 'card'  },
-    { id: 'a1', text: 'Created board "Web Engineering Project"',                       time: '2 days ago', type: 'board' },
-  ]);
+  // --- 1. DEFINED FETCH LOGIC AS A REUSABLE FUNCTION ---
+  const fetchMyData = useCallback(async () => {
+    if (!user) return;
+    const token = localStorage.getItem('token');
+    
+    try {
+      // Fetch Boards
+      const response = await fetch('http://localhost:5000/api/boards', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const myBoards = await response.json();
+        const formattedBoards = myBoards.map(b => ({ ...b, id: b._id }));
+        setBoards(formattedBoards);
+
+        // Fetch Lists and Cards for every board
+        const loadedBoardData = {};
+        for (let board of myBoards) {
+          try {
+            const listRes = await fetch(`http://localhost:5000/api/lists?boardId=${board._id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (listRes.ok) {
+              const myLists = await listRes.json();
+              loadedBoardData[board._id] = myLists.map(l => ({
+                ...l,
+                id: l._id,
+                cards: (l.cards || []).map(c => ({ ...c, id: c._id }))
+              }));
+            }
+          } catch (err) {
+            loadedBoardData[board._id] = [];
+          }
+        }
+        setBoardData(loadedBoardData);
+      }
+    } catch (error) {
+      console.error("Data restoration failed:", error);
+    }
+  }, [user]);
+
+  // --- 2. TRIGGER FETCH ON MOUNT OR LOGIN ---
+  useEffect(() => {
+    if (user) {
+      fetchMyData();
+    }
+  }, [user, fetchMyData]);
 
   const addActivity = (entry) =>
     setActivity(prev => [{ ...entry, id: `a-${Date.now()}-${Math.random()}`, time: 'just now' }, ...prev]);
@@ -46,104 +79,112 @@ export default function App() {
     const name = boards.find(b => b.id === boardId)?.title ?? '';
     setPinnedBoards(prev => {
       const next = new Set(prev);
-      if (next.has(boardId)) { next.delete(boardId); addActivity({ text: `Unpinned "${name}"`, type: 'pin' }); }
-      else                   { next.add(boardId);    addActivity({ text: `Pinned "${name}"`,   type: 'pin' }); }
+      if (next.has(boardId)) next.delete(boardId);
+      else next.add(boardId);
       return next;
     });
   };
 
-  const handleCreateBoard = (title) => {
-    const id = `b${Date.now()}`;
-    // Added isArchived: false here
-    setBoards(prev => [...prev, { id, title, desc: 'Project Workspace', isArchived: false }]);
-    addActivity({ text: `Created board "${title}"`, type: 'board' });
+  const handleCreateBoard = async (title) => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await fetch('http://localhost:5000/api/boards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ title: title, desc: 'Project Workspace', color: '#ffffff' })
+      });
+      
+      if (response.ok) {
+        const newBoard = await response.json();
+        newBoard.id = newBoard._id; 
+        setBoards(prev => [...prev, newBoard]);
+        fetchMyData(); // Refresh data to include new board structure
+      }
+    } catch (error) {
+      alert("Failed to save board.");
+    }
   };
 
-  const openBoard = (board) => { setActiveBoard(board); setView('workspace'); };
-  const goHome    = ()       => { setActiveBoard(null);  setView('home');      };
-  const goBoards  = ()       => { setActiveBoard(null);  setView('boards');    };
-  const goProfile = ()       => setView('profile');
-  const doLogout  = ()       => { setUser(null); setView('home'); setActiveBoard(null); };
-
-  const searchOverlay = searchOpen && (
-    <SearchFilter
-      boards={boards}
-      boardData={boardData}
-      onClose={() => setSearchOpen(false)}
-      onSelectBoard={(board) => { openBoard(board); setSearchOpen(false); }}
-    />
-  );
-
-  if (!user) return <Auth onLogin={(u) => setUser(u)} />;
-
-  if (view === 'profile') return (
-    <>
-      <UserProfile
-        user={user} setUser={setUser}
-        boards={boards} boardData={boardData}
-        goBack={goHome} onLogout={doLogout}
-      />
-      {searchOverlay}
-    </>
-  );
-
-  if (view === 'workspace' && activeBoard) {
-    const activeLists = boardData[activeBoard.id] || [
-      { id: `l1-${Date.now()}`, title: 'To Do',       cards: [] },
-      { id: `l2-${Date.now()}`, title: 'In Progress', cards: [] },
-    ];
-    return (
-      <>
-        <BoardWorkspace
-          board={activeBoard}
-          goBack={goHome}
-          lists={activeLists}
-          setLists={(nl) => setBoardData(prev => ({ ...prev, [activeBoard.id]: nl }))}
-          onOpenSearch={() => setSearchOpen(true)}
-          onOpenProfile={goProfile}
-          user={user}
-          addActivity={addActivity}
-        />
-        {searchOverlay}
-      </>
-    );
-  }
-
-  if (view === 'boards') return (
-    <>
-      <BoardDashboard
-        user={user}
-        boards={boards}
-        setBoards={setBoards} // Passed setBoards so BoardDashboard can Delete/Archive
-        pinnedBoards={pinnedBoards}
-        onTogglePin={handleTogglePin}
-        onCreateBoard={handleCreateBoard}
-        onLogout={doLogout}
-        onSelectBoard={openBoard}
-        onOpenSearch={() => setSearchOpen(true)}
-        onOpenProfile={goProfile}
-        goHome={goHome}
-      />
-      {searchOverlay}
-    </>
-  );
+  const doLogout = () => { 
+    localStorage.removeItem('token');
+    localStorage.removeItem('user'); 
+    setUser(null); 
+    setBoards([]);
+    setBoardData({});
+    navigate('/login');
+  };
 
   return (
     <>
-      <HomeDashboard
-        user={user}
-        boards={boards}
-        boardData={boardData}
-        pinnedBoards={pinnedBoards}
-        onTogglePin={handleTogglePin}
-        activity={activity}
-        onSelectBoard={openBoard}
-        onOpenSearch={() => setSearchOpen(true)}
-        onOpenProfile={goProfile}
-        onGoToBoards={goBoards}
-        onLogout={doLogout}
-      />
-      {searchOverlay}
+      <Routes>
+        <Route path="/login" element={
+          !user ? <Auth onLogin={(u) => setUser(u)} /> : <Navigate to="/" />
+        } />
+
+        <Route path="/" element={
+          user ? (
+            <HomeDashboard
+              user={user}
+              boards={boards}
+              boardData={boardData}
+              pinnedBoards={pinnedBoards}
+              onTogglePin={handleTogglePin}
+              activity={activity}
+              onOpenSearch={() => setSearchOpen(true)}
+              onLogout={doLogout}
+            />
+          ) : <Navigate to="/login" />
+        } />
+
+        <Route path="/boards" element={
+          user ? (
+            <BoardDashboard
+              user={user}
+              boards={boards}
+              setBoards={setBoards}
+              pinnedBoards={pinnedBoards}
+              onTogglePin={handleTogglePin}
+              onCreateBoard={handleCreateBoard}
+              onLogout={doLogout}
+              onOpenSearch={() => setSearchOpen(true)}
+            />
+          ) : <Navigate to="/login" />
+        } />
+
+        <Route path="/b/:boardId" element={
+          user ? (
+            <BoardWorkspace
+              boards={boards}
+              boardData={boardData}
+              setBoardData={setBoardData}
+              onOpenSearch={() => setSearchOpen(true)}
+              user={user}
+              addActivity={addActivity}
+            />
+          ) : <Navigate to="/login" />
+        } />
+
+        <Route path="/profile" element={
+          user ? (
+            <UserProfile
+              user={user} setUser={setUser}
+              boards={boards} boardData={boardData}
+              onLogout={doLogout}
+            />
+          ) : <Navigate to="/login" />
+        } />
+
+        <Route path="*" element={<Navigate to={user ? "/" : "/login"} />} />
+      </Routes>
+
+      {searchOpen && user && (
+        <SearchFilter
+          boards={boards}
+          boardData={boardData}
+          onClose={() => setSearchOpen(false)}
+          onSelectBoard={(board) => { navigate(`/b/${board.id}`); setSearchOpen(false); }}
+        />
+      )}
     </>
   );
 }

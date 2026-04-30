@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, LayoutDashboard, Search, Star, 
-  Trash2, Archive, RotateCcw, Edit2, X, MoreVertical 
+  Trash2, Archive, RotateCcw, Edit2, X
 } from 'lucide-react';
 
 function initials(name = '') {
@@ -10,13 +11,13 @@ function initials(name = '') {
 
 export default function BoardDashboard({
   user, boards, setBoards, pinnedBoards, onTogglePin, onCreateBoard,
-  onLogout, onSelectBoard, onOpenSearch, onOpenProfile, goHome,
+  onLogout, onOpenSearch,
 }) {
+  const navigate = useNavigate();
   const [newBoardTitle, setNewBoardTitle] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
 
-  // Filter logic for Active vs Archived
   const visibleBoards = boards.filter(b => !!b.isArchived === showArchived);
 
   const handleSubmit = (e) => {
@@ -26,22 +27,58 @@ export default function BoardDashboard({
     setNewBoardTitle('');
   };
 
-  const handleDeleteBoard = (e, id) => {
+  const handleDeleteBoard = async (e, id) => {
     e.stopPropagation();
     if (window.confirm("Delete this board permanently? This cannot be undone.")) {
-      setBoards(boards.filter(b => b.id !== id));
+      try {
+        const token = localStorage.getItem('token');
+        await fetch(`http://localhost:5000/api/boards/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setBoards(boards.filter(b => b.id !== id));
+      } catch (error) {
+        alert("Failed to delete board from database.");
+      }
     }
   };
 
-  const handleArchiveToggle = (e, id) => {
+  const handleArchiveToggle = async (e, id) => {
     e.stopPropagation();
-    setBoards(boards.map(b => b.id === id ? { ...b, isArchived: !b.isArchived } : b));
+    const boardToUpdate = boards.find(b => b.id === id);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`http://localhost:5000/api/boards/${id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ isArchived: !boardToUpdate.isArchived })
+      });
+      setBoards(boards.map(b => b.id === id ? { ...b, isArchived: !b.isArchived } : b));
+    } catch (error) {
+      alert("Failed to archive board.");
+    }
   };
 
-  const handleUpdateBoard = (e) => {
+  const handleUpdateBoard = async (e) => {
     e.preventDefault();
-    setBoards(boards.map(b => b.id === editingBoard.id ? editingBoard : b));
-    setEditingBoard(null);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`http://localhost:5000/api/boards/${editingBoard.id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ title: editingBoard.title, desc: editingBoard.desc })
+      });
+      setBoards(boards.map(b => b.id === editingBoard.id ? editingBoard : b));
+      setEditingBoard(null);
+    } catch (error) {
+      alert("Failed to update board details.");
+    }
   };
 
   return (
@@ -49,11 +86,9 @@ export default function BoardDashboard({
       <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] -z-10" />
 
       <div className="max-w-6xl mx-auto z-10 relative">
-        
-        {/* Updated: Header is now frosted glass with white text */}
         <header className="flex justify-between items-center mb-10 bg-white/10 backdrop-blur-md p-5 rounded-3xl border border-white/20 shadow-lg">
           <div className="flex items-center gap-4">
-            <button onClick={goHome} className="p-2.5 bg-white/20 hover:bg-indigo-600 text-white rounded-2xl transition-all border border-white/10">
+            <button onClick={() => navigate('/')} className="p-2.5 bg-white/20 hover:bg-indigo-600 text-white rounded-2xl transition-all border border-white/10">
               <ArrowLeft size={18} />
             </button>
             <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg border border-indigo-400/30">
@@ -82,7 +117,7 @@ export default function BoardDashboard({
               <span className="hidden sm:inline">Search</span>
             </button>
 
-            <button onClick={onOpenProfile} className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white/50 flex items-center justify-center text-xs font-black text-white hover:ring-2 hover:ring-indigo-400 transition-all overflow-hidden shadow-md">
+            <button onClick={() => navigate('/profile')} className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white/50 flex items-center justify-center text-xs font-black text-white hover:ring-2 hover:ring-indigo-400 transition-all overflow-hidden shadow-md">
               {user.avatar ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" /> : <span>{initials(user.name)}</span>}
             </button>
 
@@ -94,7 +129,6 @@ export default function BoardDashboard({
 
         {!showArchived && (
           <form onSubmit={handleSubmit} className="mb-10 flex gap-4 max-w-xl">
-            {/* Updated: Input field is now glass with white text */}
             <input
               type="text"
               placeholder="New board name…"
@@ -109,7 +143,6 @@ export default function BoardDashboard({
         )}
 
         {visibleBoards.length === 0 ? (
-          // Updated: Empty state matches the glassmorphism of HomeDashboard
           <div className="bg-white/10 backdrop-blur-md border border-white/20 shadow-lg rounded-[32px] text-center py-20">
             <div className="text-5xl mb-4 drop-shadow-md">🗂️</div>
             <p className="font-black text-white text-xl mb-1 drop-shadow-md">Nothing to show here</p>
@@ -119,13 +152,12 @@ export default function BoardDashboard({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-7">
-            {/* Board Cards remain light so the dark text on them is easy to read */}
             {visibleBoards.map(board => {
               const pinned = pinnedBoards.has(board.id);
               return (
                 <div
                   key={board.id}
-                  onClick={() => onSelectBoard(board)}
+                  onClick={() => navigate(`/b/${board.id}`)}
                   className="relative bg-white/80 backdrop-blur-xl p-7 rounded-3xl shadow-lg hover:shadow-2xl transition-all cursor-pointer border border-white hover:border-indigo-300 group hover:-translate-y-1"
                 >
                   <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
@@ -154,7 +186,6 @@ export default function BoardDashboard({
         )}
       </div>
 
-      {/* Edit Board Modal remains the same */}
       {editingBoard && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl p-8">

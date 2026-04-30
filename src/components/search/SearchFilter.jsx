@@ -46,6 +46,17 @@ function isThisWeek(dateStr) {
   return d >= startOfWeek && d <= endOfWeek;
 }
 
+function highlightText(text, query) {
+  if (!query.trim()) return text;
+  const regex = new RegExp(`(${query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts  = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part)
+      ? <mark key={i} className="bg-indigo-100 text-indigo-700 rounded px-0.5 not-italic font-black">{part}</mark>
+      : part
+  );
+}
+
 export default function SearchFilter({ boards, boardData, onClose, onSelectBoard }) {
   const [query,          setQuery]          = useState('');
   const [activeTab,      setActiveTab]      = useState('all');
@@ -338,16 +349,5 @@ export default function SearchFilter({ boards, boardData, onClose, onSelectBoard
         </div>
       </div>
     </div>
-  );
-}
-
-function highlightText(text, query) {
-  if (!query.trim()) return text;
-  const regex = new RegExp(`(${query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  const parts  = text.split(regex);
-  return parts.map((part, i) =>
-    regex.test(part)
-      ? <mark key={i} className="bg-indigo-100 text-indigo-700 rounded px-0.5 not-italic font-black">{part}</mark>
-      : part
   );
 }
