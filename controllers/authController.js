@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
+// Set up the email transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -11,25 +12,49 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// --- REGISTER (WITH "SOFT LOCK" FIX) ---
 async function register(req, res) {
   try {
     const { name, email, password } = req.body;
     
-    const existingUser = await User.findOne({ email: email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
+    // 1. Check if the user is already in the database
+    let existingUser = await User.findOne({ email: email });
+    
+    // Setup the encryption and new OTP
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+ 
+    if (existingUser) {
+      if (existingUser.isVerified) {
+      
+        return res.status(400).json({ message: "User already exists. Please login." });
+      } else {
+        existingUser.name = name;
+        existingUser.password = hashedPassword;
+        existingUser.otp = generatedOtp;
+        await existingUser.save();
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: "TaskFlow - Verify Your Account (Resend)",
+          text: `Hello ${name}! You requested a new verification code. Your code is: ${generatedOtp}`
+        });
+
+        console.log(` NEW OTP resent successfully to ${email}`);
+        
+        return res.status(201).json({ message: "Verification code resent! Please check your email." });
+      }
+    }
 
     const newUser = new User({
       name: name,
       email: email,
       password: hashedPassword,
-      otp: generatedOtp
+      otp: generatedOtp,
+      isVerified: false 
     });
     
     await newUser.save();
@@ -41,8 +66,11 @@ async function register(req, res) {
       text: `Hello ${name}! Your verification code is: ${generatedOtp}`
     });
 
+    console.log(` Initial OTP sent successfully to ${email}`);
+
     res.status(201).json({ message: "Account created! Please check your email for the OTP." });
   } catch (err) {
+    console.error("Registration Error:", err);
     res.status(500).json({ message: "Error in registration" });
   }
 }
@@ -56,8 +84,8 @@ async function login(req, res) {
       return res.status(400).json({ message: "User not found" });
     }
 
-    if (user.isVerified === false) {
-      return res.status(401).json({ message: "Please verify your email before logging in." });
+    if (!user.isVerified) {
+      return res.status(401).json({ message: "Please verify your email with the OTP before logging in." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -90,7 +118,7 @@ async function verifyEmail(req, res) {
     }
 
     user.isVerified = true;
-    user.otp = "";
+    user.otp = ""; 
     await user.save();
 
     res.status(200).json({ message: "Email successfully verified! You can now log in." });
