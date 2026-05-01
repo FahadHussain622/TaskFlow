@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-// Added Trash2 to the imports
 import { ArrowLeft, Plus, MessageSquare, Paperclip, Calendar, Settings, AlertTriangle, Trash2 } from 'lucide-react';
 
 export default function BoardWorkspace({ boards, boardData, setBoardData, user, addActivity }) {
@@ -14,16 +13,13 @@ export default function BoardWorkspace({ boards, boardData, setBoardData, user, 
   }, [boards, boardId]);
 
   const lists = useMemo(() => {
-    // Check every possible key format in the boardData object
     return boardData[boardId] || boardData[board?._id] || boardData[board?.id] || [];
   }, [boardData, boardId, board]);
 
   const setLists = (newLists) => {
-    // Update using the specific ID found in the URL
     setBoardData(prev => ({ ...prev, [boardId]: newLists }));
   };
 
-  // 1. Loading State
   if (!board) {
     return (
       <div className="h-screen bg-slate-900 flex flex-col items-center justify-center gap-4">
@@ -33,7 +29,6 @@ export default function BoardWorkspace({ boards, boardData, setBoardData, user, 
     );
   }
 
-  // --- 1. DRAG AND DROP API ---
   const onDragEnd = async (result) => {
     const { source, destination } = result;
     if (!destination) return;
@@ -75,7 +70,6 @@ export default function BoardWorkspace({ boards, boardData, setBoardData, user, 
     }
   };
 
-  // --- 2. ADD CARD API ---
   const handleAddCard = async (listId) => {
     const list = lists.find(l => l.id === listId || l._id === listId);
     if (list.wipLimit && list.cards.length >= list.wipLimit) {
@@ -127,6 +121,31 @@ export default function BoardWorkspace({ boards, boardData, setBoardData, user, 
       }
     } catch (error) {
       alert("Failed to create list.");
+    }
+  };
+
+  // --- EDIT LIST TITLE API ---
+  const handleEditListTitle = async (listId, currentTitle) => {
+    const newTitle = window.prompt("Enter new list title:", currentTitle);
+    
+    // Stop if they hit cancel or didn't change anything
+    if (!newTitle || newTitle.trim() === "" || newTitle === currentTitle) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:5000/api/lists/${listId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ title: newTitle.trim() })
+      });
+      
+      if (res.ok) {
+        // Update the screen instantly
+        setLists(lists.map(l => (l.id === listId || l._id === listId) ? { ...l, title: newTitle.trim() } : l));
+        if (addActivity) addActivity({ text: `Renamed list to "${newTitle.trim()}"`, type: 'list' });
+      }
+    } catch (error) {
+      alert("Failed to update list title.");
     }
   };
 
@@ -311,7 +330,13 @@ export default function BoardWorkspace({ boards, boardData, setBoardData, user, 
                 <div key={listId} className={`bg-white/80 backdrop-blur-xl border-2 w-[320px] rounded-[32px] flex flex-col flex-shrink-0 shadow-xl overflow-hidden transition-all ${isAtLimit ? 'border-rose-400/50' : 'border-white'}`}>
                   <div className={`p-6 flex justify-between items-center ${isAtLimit ? 'bg-rose-50/50' : 'bg-white/40'}`}>
                     <div className="flex items-center gap-2">
-                      <h2 className="font-black text-slate-800 text-xs tracking-[0.15em] uppercase">{list.title}</h2>
+                      <h2 
+                        onClick={() => handleEditListTitle(listId, list.title)}
+                        className="font-black text-slate-800 text-xs tracking-[0.15em] uppercase cursor-pointer hover:text-indigo-600 transition-colors"
+                        title="Click to rename list"
+                      >
+                        {list.title}
+                      </h2>
                       {isAtLimit && <AlertTriangle size={14} className="text-rose-500" />}
                     </div>
                     <div className="flex items-center gap-2">
