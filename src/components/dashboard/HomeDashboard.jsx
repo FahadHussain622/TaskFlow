@@ -1,28 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Star, LayoutDashboard, Plus, Calendar,
-  ArrowRight, ListTodo, AlertCircle, Clock, LogOut, Layers, Sparkles, Bug
+  ArrowRight, ListTodo, AlertCircle, Clock, LogOut,
+  Layers, Sparkles, Bug, RefreshCw,
 } from 'lucide-react';
 
+const API = 'http://localhost:5000';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function parseCardDate(str) {
-  if (!str) return null;
-  const [mon, day] = str.trim().split(' ');
-  const month = MONTHS.indexOf(mon);
-  const d = parseInt(day, 10);
-  if (month === -1 || isNaN(d)) return null;
-  return new Date(new Date().getFullYear(), month, d);
-}
 
-function isThisWeek(dateStr) {
-  const d = parseCardDate(dateStr);
-  if (!d) return false;
-  const now = new Date();
-  const start = new Date(now); start.setDate(now.getDate() - now.getDay()); start.setHours(0,0,0,0);
-  const end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,999);
-  return d >= start && d <= end;
+function authHeader() {
+  return { Authorization: `Bearer ${localStorage.getItem('token')}` };
 }
 
 function getGreeting() {
@@ -33,21 +22,112 @@ function getGreeting() {
 }
 
 function getToday() {
-  return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
 }
 
 function initials(name = '') {
-  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  return name.split(' ').filter(Boolean).slice(0, 2)
+    .map(w => w[0].toUpperCase()).join('');
 }
 
-function boardTaskCount(boardId, boardData) {
-  return (boardData[boardId] || []).reduce((sum, list) => sum + list.cards.length, 0);
+function parseCardDate(str) {
+  if (!str) return null;
+  const [mon, day] = str.trim().split(' ');
+  const month = MONTHS.indexOf(mon);
+  const d     = parseInt(day, 10);
+  if (month === -1 || isNaN(d)) return null;
+  return new Date(new Date().getFullYear(), month, d);
 }
 
-function boardDoneCount(boardId, boardData) {
-  return (boardData[boardId] || [])
+function isThisWeek(dateStr) {
+  const d = parseCardDate(dateStr);
+  if (!d) return false;
+  const now   = new Date();
+  const start = new Date(now); start.setDate(now.getDate() - now.getDay()); start.setHours(0, 0, 0, 0);
+  const end   = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999);
+  return d >= start && d <= end;
+}
+
+
+function SectionHeading({ children, action }) {
+  return (
+    <div className="flex items-center justify-between mb-5">
+      <h2 className="text-[10px] font-black text-white uppercase tracking-[0.18em] drop-shadow-md">
+        {children}
+      </h2>
+      {action}
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, value, label, accent, sub }) {
+  const accents = {
+    indigo:  { ring: 'ring-indigo-100',  icon: 'text-indigo-500 bg-indigo-50',  num: 'text-indigo-700'  },
+    emerald: { ring: 'ring-emerald-100', icon: 'text-emerald-500 bg-emerald-50', num: 'text-emerald-700' },
+    amber:   { ring: 'ring-amber-100',   icon: 'text-amber-500 bg-amber-50',    num: 'text-amber-700'   },
+    rose:    { ring: 'ring-rose-100',    icon: 'text-rose-500 bg-rose-50',      num: 'text-rose-700'    },
+  };
+  const c = accents[accent] || accents.indigo;
+
+  return (
+    <div className={`bg-white/80 backdrop-blur-xl border border-white rounded-3xl p-6 shadow-sm ring-1 ${c.ring} flex flex-col gap-3`}>
+      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${c.icon}`}>
+        <Icon size={18} />
+      </div>
+      <div>
+        <p className={`text-3xl font-black leading-none ${c.num}`}>{value ?? '—'}</p>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{label}</p>
+        {sub != null && <p className="text-[10px] font-medium text-slate-300 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+function BoardCard({ board, boardData, pinned, onSelect, onTogglePin, large }) {
+  const lists = boardData[board.id] || boardData[board._id] || [];
+  const total = lists.reduce((s, l) => s + l.cards.length, 0);
+  const done  = lists
     .filter(l => ['done','completed','finished'].some(k => l.title.toLowerCase().includes(k)))
-    .reduce((sum, list) => sum + list.cards.length, 0);
+    .reduce((s, l) => s + l.cards.length, 0);
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  return (
+    <div
+      onClick={() => onSelect(board)}
+      className={`relative bg-white/75 backdrop-blur-xl border border-white rounded-3xl shadow-md
+                  hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all cursor-pointer group
+                  ${large ? 'p-7' : 'p-6'}`}
+    >
+      <button
+        onClick={e => { e.stopPropagation(); onTogglePin(board.id); }}
+        title={pinned ? 'Unpin board' : 'Pin board'}
+        className={`absolute top-4 right-4 p-1.5 rounded-xl transition-all
+          ${pinned
+            ? 'text-amber-400 bg-amber-50 hover:bg-amber-100'
+            : 'text-slate-200 hover:text-amber-400 hover:bg-amber-50 opacity-0 group-hover:opacity-100'}`}
+      >
+        <Star size={14} fill={pinned ? 'currentColor' : 'none'} />
+      </button>
+
+      <div className="w-8 h-1 bg-indigo-400 rounded-full mb-4 group-hover:w-full transition-all duration-500 opacity-40" />
+      <h3 className={`font-black text-slate-800 group-hover:text-indigo-600 transition-colors leading-tight mb-1
+                      ${large ? 'text-lg' : 'text-base'}`}>
+        {board.title}
+      </h3>
+      <p className="text-xs font-medium text-slate-400 mb-4 truncate">{board.desc}</p>
+
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-full bg-indigo-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex-shrink-0">
+          {total} task{total !== 1 ? 's' : ''}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 const ACTIVITY_DOT = {
@@ -58,87 +138,6 @@ const ACTIVITY_DOT = {
   delete: 'bg-rose-500',
 };
 
-function SectionHeading({ children, action }) {
-  return (
-    <div className="flex items-center justify-between mb-5">
-      <h2 className="text-[10px] font-black text-white uppercase tracking-[0.18em] drop-shadow-md">{children}</h2>
-      {action}
-    </div>
-  );
-}
-
-function StatCard({ icon: Icon, value, label, accent, sub }) {
-  const accents = {
-    indigo: { ring: 'ring-indigo-100', icon: 'text-indigo-500 bg-indigo-50',  num: 'text-indigo-700' },
-    emerald:{ ring: 'ring-emerald-100',icon: 'text-emerald-500 bg-emerald-50',num: 'text-emerald-700' },
-    amber:  { ring: 'ring-amber-100',  icon: 'text-amber-500 bg-amber-50',    num: 'text-amber-700'   },
-    rose:   { ring: 'ring-rose-100',   icon: 'text-rose-500 bg-rose-50',      num: 'text-rose-700'    },
-  };
-  const c = accents[accent] || accents.indigo;
-
-  return (
-    <div className={`bg-white/80 backdrop-blur-xl border border-white rounded-3xl p-6 shadow-sm ring-1 ${c.ring} flex flex-col gap-3`}>
-      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${c.icon}`}>
-        <Icon size={18} />
-      </div>
-      <div>
-        <p className={`text-3xl font-black leading-none ${c.num}`}>{value}</p>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{label}</p>
-        {sub != null && (
-          <p className="text-[10px] font-medium text-slate-300 mt-0.5">{sub}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BoardCard({ board, boardData, pinned, onSelect, onTogglePin, large }) {
-  const total = boardTaskCount(board.id, boardData);
-  const done  = boardDoneCount(board.id, boardData);
-  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
-
-  return (
-    <div
-      onClick={() => onSelect(board)}
-      className={`relative bg-white/75 backdrop-blur-xl border border-white rounded-3xl shadow-md
-                  hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all cursor-pointer group
-                  ${large ? 'p-7' : 'p-6'}`}
-    >
-      <button
-        onClick={(e) => { e.stopPropagation(); onTogglePin(board.id); }}
-        title={pinned ? 'Unpin board' : 'Pin board'}
-        className={`absolute top-4 right-4 p-1.5 rounded-xl transition-all
-          ${pinned
-            ? 'text-amber-400 bg-amber-50 hover:bg-amber-100'
-            : 'text-slate-200 hover:text-amber-400 hover:bg-amber-50 opacity-0 group-hover:opacity-100'
-          }`}
-      >
-        <Star size={14} fill={pinned ? 'currentColor' : 'none'} />
-      </button>
-
-      <div className="w-8 h-1 bg-indigo-400 rounded-full mb-4 group-hover:w-full transition-all duration-500 opacity-40" />
-
-      <h3 className={`font-black text-slate-800 group-hover:text-indigo-600 transition-colors leading-tight mb-1
-                      ${large ? 'text-lg' : 'text-base'}`}>
-        {board.title}
-      </h3>
-      <p className="text-xs font-medium text-slate-400 mb-4 truncate">{board.desc}</p>
-
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-indigo-400 rounded-full transition-all duration-700"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex-shrink-0">
-          {total} task{total !== 1 ? 's' : ''}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function ActivityItem({ item, isLast }) {
   return (
     <div className="flex gap-3">
@@ -146,8 +145,7 @@ function ActivityItem({ item, isLast }) {
         <div className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${ACTIVITY_DOT[item.type] || 'bg-slate-300'}`} />
         {!isLast && <div className="w-px flex-1 bg-white/20 mt-1" />}
       </div>
-
-      <div className={`pb-5 ${isLast ? '' : ''}`}>
+      <div className="pb-5">
         <p className="text-xs font-bold text-white leading-snug drop-shadow-sm">{item.text}</p>
         <p className="text-[10px] font-medium text-slate-200 mt-1 flex items-center gap-1">
           <Clock size={10} /> {item.time}
@@ -157,24 +155,63 @@ function ActivityItem({ item, isLast }) {
   );
 }
 
+
 export default function HomeDashboard({
   user,
   boards,
   boardData,
   pinnedBoards,
   onTogglePin,
-  activity,
+  activity: localActivity,   
   onOpenSearch,
   onLogout,
 }) {
   const navigate = useNavigate();
 
-  const stats = useMemo(() => {
+  const [stats,          setStats]          = useState(null);
+  const [serverActivity, setServerActivity] = useState([]);
+  const [loadingStats,   setLoadingStats]   = useState(true);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
+  const fetchStats = useCallback(async () => {
+    setLoadingStats(true);
+    try {
+      const res  = await fetch(`${API}/api/dashboard/stats`, { headers: authHeader() });
+      const data = await res.json();
+      if (res.ok) setStats(data);
+    } catch (err) {
+      console.error('Stats fetch error:', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
+  const fetchActivity = useCallback(async () => {
+    setLoadingActivity(true);
+    try {
+      const res  = await fetch(`${API}/api/dashboard/activity?limit=20`, { headers: authHeader() });
+      const data = await res.json();
+      if (res.ok) setServerActivity(data);
+    } catch (err) {
+      console.error('Activity fetch error:', err);
+    } finally {
+      setLoadingActivity(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+    fetchActivity();
+  }, [fetchStats, fetchActivity]);
+
+  useEffect(() => {
+    fetchStats();
+    fetchActivity();
+  }, [boardData]); 
+
+  const clientStats = useMemo(() => {
     const allCards = [];
-    let completed = 0;
-    let highPri = 0;
-    let featureCount = 0;
-    let bugCount = 0;
+    let completed = 0, highPri = 0, featureCount = 0, bugCount = 0;
 
     Object.entries(boardData).forEach(([, lists]) => {
       lists.forEach(list => {
@@ -191,17 +228,21 @@ export default function HomeDashboard({
 
     return {
       boards:      boards.length,
-      total:       allCards.length,
+      totalTasks:  allCards.length,
       completed,
-      highPri,
-      featureCount,
-      bugCount,
+      highPriority: highPri,
+      features:    featureCount,
+      bugs:        bugCount,
       dueThisWeek: allCards.filter(c => isThisWeek(c.dueDate)).length,
     };
   }, [boards, boardData]);
 
+  const displayStats = stats || clientStats;
+
+  const displayActivity = serverActivity.length > 0 ? serverActivity : localActivity;
+
   const pinnedList   = boards.filter(b => pinnedBoards.has(b.id));
-  const recentBoards = boards.slice(0, 4); 
+  const recentBoards = boards.slice(0, 4);
 
   return (
     <div className="min-h-screen bg-[url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2000')] bg-cover bg-center bg-fixed p-8 font-sans relative">
@@ -240,6 +281,14 @@ export default function HomeDashboard({
             </button>
 
             <button
+              onClick={() => { fetchStats(); fetchActivity(); }}
+              title="Refresh dashboard"
+              className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+            >
+              <RefreshCw size={16} className={loadingStats ? 'animate-spin' : ''} />
+            </button>
+
+            <button
               onClick={() => navigate('/profile')}
               className="w-10 h-10 rounded-2xl bg-indigo-600 border-2 border-white flex items-center
                          justify-center text-xs font-black text-white hover:ring-2 hover:ring-indigo-400
@@ -268,19 +317,21 @@ export default function HomeDashboard({
             {getGreeting()}, {user?.name?.split(' ')[0]} 👋
           </h2>
           <p className="text-sm font-medium text-slate-400 mt-1">
-            {stats.total === 0
+            {displayStats.totalTasks === 0
               ? 'No tasks yet — create a board to get started.'
-              : `You have ${stats.total} task${stats.total !== 1 ? 's' : ''} across ${stats.boards} board${stats.boards !== 1 ? 's' : ''}.`}
+              : `You have ${displayStats.totalTasks} task${displayStats.totalTasks !== 1 ? 's' : ''} across ${displayStats.boards} board${displayStats.boards !== 1 ? 's' : ''}.`
+            }
           </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
-          <StatCard icon={LayoutDashboard} value={stats.boards}       label="Boards"        accent="indigo" />
-          <StatCard icon={ListTodo}        value={stats.total}        label="Total Tasks"   accent="indigo" sub={stats.completed > 0 ? `${stats.completed} completed` : null} />
-          <StatCard icon={Calendar}        value={stats.dueThisWeek}  label="Due This Week" accent="amber" />
-          <StatCard icon={AlertCircle}     value={stats.highPri}      label="High Priority" accent="rose" />
-          <StatCard icon={Sparkles}        value={stats.featureCount} label="Features"      accent="emerald" />
-          <StatCard icon={Bug}             value={stats.bugCount}     label="Bugs"          accent="rose" />
+          <StatCard icon={LayoutDashboard} value={displayStats.boards}       label="Boards"        accent="indigo" />
+          <StatCard icon={ListTodo}        value={displayStats.totalTasks}   label="Total Tasks"   accent="indigo"
+                    sub={displayStats.completed > 0 ? `${displayStats.completed} completed` : null} />
+          <StatCard icon={Calendar}        value={displayStats.dueThisWeek}  label="Due This Week" accent="amber" />
+          <StatCard icon={AlertCircle}     value={displayStats.highPriority} label="High Priority" accent="rose" />
+          <StatCard icon={Sparkles}        value={displayStats.features}     label="Features"      accent="emerald" />
+          <StatCard icon={Bug}             value={displayStats.bugs}         label="Bugs"          accent="rose" />
         </div>
 
         {pinnedList.length > 0 && (
@@ -298,7 +349,7 @@ export default function HomeDashboard({
                   board={board}
                   boardData={boardData}
                   pinned
-                  onSelect={(board) => navigate(`/b/${board.id}`)}
+                  onSelect={b => navigate(`/b/${b.id}`)}
                   onTogglePin={onTogglePin}
                   large
                 />
@@ -343,7 +394,7 @@ export default function HomeDashboard({
                     board={board}
                     boardData={boardData}
                     pinned={pinnedBoards.has(board.id)}
-                    onSelect={(board) => navigate(`/b/${board.id}`)}
+                    onSelect={b => navigate(`/b/${b.id}`)}
                     onTogglePin={onTogglePin}
                   />
                 ))}
@@ -370,23 +421,28 @@ export default function HomeDashboard({
             <SectionHeading>Recent Activity</SectionHeading>
 
             <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-6 shadow-lg">
-              {activity.length === 0 ? (
+              {loadingActivity ? (
+                <div className="text-center py-8">
+                  <RefreshCw size={20} className="animate-spin text-white/40 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-white/50">Loading…</p>
+                </div>
+              ) : displayActivity.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-3xl mb-3 drop-shadow-md">💤</div>
                   <p className="text-xs font-bold text-white drop-shadow-md">No activity yet</p>
                 </div>
               ) : (
                 <div>
-                  {activity.slice(0, 10).map((item, i) => (
+                  {displayActivity.slice(0, 10).map((item, i) => (
                     <ActivityItem
-                      key={item.id}
+                      key={item.id || i}
                       item={item}
-                      isLast={i === Math.min(activity.length, 10) - 1}
+                      isLast={i === Math.min(displayActivity.length, 10) - 1}
                     />
                   ))}
-                  {activity.length > 10 && (
+                  {displayActivity.length > 10 && (
                     <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest text-center pt-2">
-                      + {activity.length - 10} more
+                      + {displayActivity.length - 10} more
                     </p>
                   )}
                 </div>

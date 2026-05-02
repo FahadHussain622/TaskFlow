@@ -1,10 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Camera, User, Lock, Trash2,
   Check, Eye, EyeOff, AlertTriangle, Save,
   Mail, ShieldCheck, LayoutDashboard, ListTodo,
 } from 'lucide-react';
+
+const API = 'http://localhost:5000';
+
+function authHeader() {
+  return { Authorization: `Bearer ${localStorage.getItem('token')}` };
+}
 
 function initials(name = '') {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
@@ -59,26 +65,38 @@ function SaveToast({ show }) {
 }
 
 function PersonalInfoTab({ user, onSave }) {
-  const [name,    setName]    = useState(user.name  || '');
-  const [email,   setEmail]   = useState(user.email || '');
-  const [dirty,   setDirty]   = useState(false);
-  const [toast,   setToast]   = useState(false);
-  const [error,   setError]   = useState('');
+  const [name,  setName]  = useState(user.name  || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [dirty, setDirty] = useState(false);
+  const [toast, setToast] = useState(false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleChange = (setter) => (e) => {
+  useEffect(() => { setName(user.name  || ''); }, [user.name]);
+  useEffect(() => { setEmail(user.email || ''); }, [user.email]);
+
+  const handleChange = setter => e => {
     setter(e.target.value);
     setDirty(true);
     setError('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim())  return setError('Name cannot be empty.');
     if (!email.trim()) return setError('Email cannot be empty.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError('Please enter a valid email.');
-    onSave({ name: name.trim(), email: email.trim() });
-    setDirty(false);
-    setToast(true);
-    setTimeout(() => setToast(false), 2500);
+
+    setSaving(true);
+    try {
+      await onSave({ name: name.trim(), email: email.trim() });
+      setDirty(false);
+      setToast(true);
+      setTimeout(() => setToast(false), 2500);
+    } catch (err) {
+      setError(err.message || 'Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -96,12 +114,12 @@ function PersonalInfoTab({ user, onSave }) {
 
       <button
         onClick={handleSave}
-        disabled={!dirty}
+        disabled={!dirty || saving}
         className="flex items-center gap-2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest
                    px-6 py-3.5 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg
                    disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
       >
-        <Save size={14} /> Save Changes
+        <Save size={14} /> {saving ? 'Saving…' : 'Save Changes'}
       </button>
 
       <SaveToast show={toast} />
@@ -144,10 +162,8 @@ function StrengthBar({ password }) {
     (/[A-Z]/.test(password) ? 1 : 0) +
     (/[0-9]/.test(password) ? 1 : 0) +
     (/[^A-Za-z0-9]/.test(password) ? 1 : 0);
-
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
   const colors = ['', 'bg-rose-400', 'bg-amber-400', 'bg-emerald-400', 'bg-emerald-500'];
-
   return (
     <div className="flex items-center gap-3 mt-2">
       <div className="flex gap-1 flex-1">
@@ -164,22 +180,32 @@ function StrengthBar({ password }) {
   );
 }
 
-function SecurityTab() {
-  const [current,  setCurrent]  = useState('');
-  const [next,     setNext]     = useState('');
-  const [confirm,  setConfirm]  = useState('');
-  const [error,    setError]    = useState('');
-  const [toast,    setToast]    = useState(false);
+function SecurityTab({ onPasswordChange }) {
+  const [current, setCurrent]   = useState('');
+  const [next,    setNext]      = useState('');
+  const [confirm, setConfirm]   = useState('');
+  const [error,   setError]     = useState('');
+  const [toast,   setToast]     = useState(false);
+  const [saving,  setSaving]    = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setError('');
-    if (!current)           return setError('Please enter your current password.');
-    if (next.length < 6)    return setError('New password must be at least 6 characters.');
-    if (next !== confirm)   return setError('Passwords do not match.');
-    if (next === current)   return setError('New password must differ from the current one.');
-    setCurrent(''); setNext(''); setConfirm('');
-    setToast(true);
-    setTimeout(() => setToast(false), 2500);
+    if (!current)         return setError('Please enter your current password.');
+    if (next.length < 6)  return setError('New password must be at least 6 characters.');
+    if (next !== confirm)  return setError('Passwords do not match.');
+    if (next === current)  return setError('New password must differ from the current one.');
+
+    setSaving(true);
+    try {
+      await onPasswordChange(current, next);
+      setCurrent(''); setNext(''); setConfirm('');
+      setToast(true);
+      setTimeout(() => setToast(false), 2500);
+    } catch (err) {
+      setError(err.message || 'Failed to change password. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -192,9 +218,9 @@ function SecurityTab() {
         </p>
       </div>
 
-      <PasswordField label="Current Password"  value={current} onChange={e => { setCurrent(e.target.value);  setError(''); }} placeholder="••••••••" />
+      <PasswordField label="Current Password"     value={current} onChange={e => { setCurrent(e.target.value);  setError(''); }} placeholder="••••••••" />
       <div>
-        <PasswordField label="New Password" value={next} onChange={e => { setNext(e.target.value); setError(''); }} placeholder="••••••••" />
+        <PasswordField label="New Password"       value={next}    onChange={e => { setNext(e.target.value);    setError(''); }} placeholder="••••••••" />
         <StrengthBar password={next} />
       </div>
       <PasswordField label="Confirm New Password" value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }} placeholder="••••••••" />
@@ -203,10 +229,12 @@ function SecurityTab() {
 
       <button
         onClick={handleSave}
+        disabled={saving}
         className="flex items-center gap-2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest
-                   px-6 py-3.5 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg"
+                   px-6 py-3.5 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg
+                   disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        <Lock size={14} /> Update Password
+        <Lock size={14} /> {saving ? 'Updating…' : 'Update Password'}
       </button>
 
       <SaveToast show={toast} />
@@ -214,12 +242,21 @@ function SecurityTab() {
   );
 }
 
-function DangerZoneTab({ user, onDeleteAccount }) {
-  const [step,    setStep]    = useState('idle');
-  const [typed,   setTyped]   = useState('');
+function DangerZoneTab({ onDeleteAccount }) {
+  const [step,   setStep]   = useState('idle');
+  const [typed,  setTyped]  = useState('');
+  const [busy,   setBusy]   = useState(false);
   const CONFIRM_PHRASE = 'delete my account';
-
   const canDelete = typed.toLowerCase() === CONFIRM_PHRASE;
+
+  const handleDelete = async () => {
+    setBusy(true);
+    try {
+      await onDeleteAccount();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -229,7 +266,7 @@ function DangerZoneTab({ user, onDeleteAccount }) {
           <p className="text-[11px] font-black text-rose-700 uppercase tracking-widest mb-1">Permanent Action</p>
           <p className="text-xs font-medium text-rose-500 leading-relaxed">
             Deleting your account will permanently remove all your boards, lists,
-            and task cards. This action cannot be undone.
+            and task cards from the database. This action cannot be undone.
           </p>
         </div>
       </div>
@@ -266,13 +303,13 @@ function DangerZoneTab({ user, onDeleteAccount }) {
           />
           <div className="flex gap-3">
             <button
-              onClick={onDeleteAccount}
-              disabled={!canDelete}
+              onClick={handleDelete}
+              disabled={!canDelete || busy}
               className="flex items-center gap-2 bg-rose-600 text-white text-[10px] font-black
                          uppercase tracking-widest px-6 py-3.5 rounded-2xl hover:bg-rose-700 transition-all
                          disabled:opacity-30 disabled:cursor-not-allowed shadow-lg disabled:shadow-none"
             >
-              <Trash2 size={14} /> Confirm Delete
+              <Trash2 size={14} /> {busy ? 'Deleting…' : 'Confirm Delete'}
             </button>
             <button
               onClick={() => { setStep('idle'); setTyped(''); }}
@@ -289,43 +326,105 @@ function DangerZoneTab({ user, onDeleteAccount }) {
 }
 
 const TABS = [
-  { id: 'info',     label: 'Personal Info',  icon: User       },
-  { id: 'security', label: 'Security',       icon: Lock       },
-  { id: 'danger',   label: 'Danger Zone',    icon: Trash2     },
+  { id: 'info',     label: 'Personal Info', icon: User  },
+  { id: 'security', label: 'Security',      icon: Lock  },
+  { id: 'danger',   label: 'Danger Zone',   icon: Trash2 },
 ];
 
 export default function UserProfile({ user, setUser, boards, boardData, onLogout }) {
-  const navigate = useNavigate();
-  const [activeTab,  setActiveTab]  = useState('info');
-  const [avatarSrc,  setAvatarSrc]  = useState(user.avatar || null);
+  const navigate    = useNavigate();
+  const [activeTab, setActiveTab] = useState('info');
+  const [avatarSrc, setAvatarSrc] = useState(user.avatar || null);
   const fileInputRef = useRef(null);
 
-  const handleAvatarChange = (e) => {
+  useEffect(() => {
+    fetch(`${API}/api/users/me`, { headers: authHeader() })
+      .then(r => r.json())
+      .then(data => {
+        if (!data._id) return;
+        const avatarUrl = data.avatar
+          ? (data.avatar.startsWith('http') ? data.avatar : `${API}/${data.avatar}`)
+          : null;
+        setAvatarSrc(avatarUrl);
+        setUser(u => ({ ...u, name: data.name, email: data.email, avatar: avatarUrl }));
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        localStorage.setItem('user', JSON.stringify({ ...stored, name: data.name, email: data.email, avatar: avatarUrl }));
+      })
+      .catch(console.error);
+  }, []);
+
+  const handleSaveInfo = async ({ name, email }) => {
+    const res  = await fetch(`${API}/api/users/me`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body:    JSON.stringify({ name, email }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Update failed');
+
+    setUser(u => ({ ...u, name: data.name, email: data.email }));
+    const stored = JSON.parse(localStorage.getItem('user') || '{}');
+    localStorage.setItem('user', JSON.stringify({ ...stored, name: data.name, email: data.email }));
+  };
+
+  const handlePasswordChange = async (currentPassword, newPassword) => {
+    const res  = await fetch(`${API}/api/users/password`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body:    JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Password change failed');
+  };
+
+  const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return;
+    if (!file || !file.type.startsWith('image/')) return;
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const src = ev.target.result;
-      setAvatarSrc(src);
-      setUser(u => ({ ...u, avatar: src }));
-    };
+    reader.onload = ev => setAvatarSrc(ev.target.result);
     reader.readAsDataURL(file);
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const res  = await fetch(`${API}/api/users/avatar`, {
+        method:  'POST',
+        headers: authHeader(),
+        body:    formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.avatar) {
+        const avatarUrl = data.avatar.startsWith('http')
+          ? data.avatar
+          : `${API}/${data.avatar}`;
+        setAvatarSrc(avatarUrl);
+        setUser(u => ({ ...u, avatar: avatarUrl }));
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        localStorage.setItem('user', JSON.stringify({ ...stored, avatar: avatarUrl }));
+      }
+    } catch (err) {
+      console.error('Avatar upload failed:', err);
+    }
   };
 
-  const handleSaveInfo = ({ name, email }) => {
-    setUser(u => ({ ...u, name, email }));
-  };
-
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    try {
+      await fetch(`${API}/api/users/me`, {
+        method:  'DELETE',
+        headers: authHeader(),
+      });
+    } catch (err) {
+      console.error('Delete account error:', err);
+    }
     onLogout();
   };
 
   const totalBoards = boards.length;
   const totalTasks  = countTasks(boardData);
-
   const stats = [
-    { label: 'Boards',     value: totalBoards, icon: LayoutDashboard },
+    { label: 'Boards',      value: totalBoards, icon: LayoutDashboard },
     { label: 'Total Tasks', value: totalTasks,  icon: ListTodo        },
   ];
 
@@ -344,9 +443,7 @@ export default function UserProfile({ user, setUser, boards, boardData, onLogout
           </button>
           <div>
             <h1 className="text-lg font-black text-slate-800 tracking-tight">My Profile</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Account Settings
-            </p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Settings</p>
           </div>
         </header>
 
@@ -432,10 +529,8 @@ export default function UserProfile({ user, setUser, boards, boardData, onLogout
             </div>
 
             {activeTab === 'info'     && <PersonalInfoTab user={user} onSave={handleSaveInfo} />}
-            {activeTab === 'security' && <SecurityTab />}
-            {activeTab === 'danger'   && (
-              <DangerZoneTab user={user} onDeleteAccount={handleDeleteAccount} />
-            )}
+            {activeTab === 'security' && <SecurityTab onPasswordChange={handlePasswordChange} />}
+            {activeTab === 'danger'   && <DangerZoneTab onDeleteAccount={handleDeleteAccount} />}
           </div>
         </div>
       </div>
