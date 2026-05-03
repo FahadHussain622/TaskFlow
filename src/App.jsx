@@ -22,7 +22,6 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // --- 1. DEFINED FETCH LOGIC AS A REUSABLE FUNCTION ---
   const fetchMyData = useCallback(async () => {
     if (!user) return;
     const token = localStorage.getItem('token');
@@ -65,7 +64,7 @@ export default function App() {
     }
   }, [user]);
 
-  // --- 2. TRIGGER FETCH ON MOUNT OR LOGIN ---
+  // --- TRIGGER FETCH ON MOUNT OR LOGIN ---
   useEffect(() => {
     if (user) {
       fetchMyData();
@@ -151,6 +150,7 @@ export default function App() {
           ) : <Navigate to="/login" />
         } />
 
+        {/* THIS IS THE ROUTE WE ARE MATCHING! -> /b/:boardId */}
         <Route path="/b/:boardId" element={
           user ? (
             <BoardWorkspace
@@ -177,13 +177,9 @@ export default function App() {
         <Route path="*" element={<Navigate to={user ? "/" : "/login"} />} />
       </Routes>
 
+      {/* CLEANED UP: The new API-powered SearchFilter only needs onClose! */}
       {searchOpen && user && (
-        <SearchFilter
-          boards={boards}
-          boardData={boardData}
-          onClose={() => setSearchOpen(false)}
-          onSelectBoard={(board) => { navigate(`/b/${board.id}`); setSearchOpen(false); }}
-        />
+        <SearchFilter onClose={() => setSearchOpen(false)} />
       )}
     </>
   );
